@@ -1,0 +1,174 @@
+{
+  "name": "advanced-copy-for-java",
+  "displayName": "Advanced Copy for Java",
+  "description": "Java 开发利器：支持复制引用路径、REST 接口路径、Arthas 命令生成及 JSON 结构重现。",
+  "version": "1.2.0",
+  "publisher": "qinlinglong",
+  "author": "qinlinglong",
+  "icon": "logo-128.png",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "main": "./extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/qinlinglong/advanced-copy"
+  },
+  "activationEvents": [
+    "onLanguage:java"
+  ],
+  "contributes": {
+    "submenus": [
+      {
+        "id": "advCopy.mainSubmenu",
+        "label": "Advanced Copy",
+        "icon": "$(zap)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "advCopy.copyReference",
+        "title": "Copy Reference (Java Path)"
+      },
+      {
+        "command": "advCopy.copyRestPath",
+        "title": "Copy REST Full Path"
+      },
+      {
+        "command": "advCopy.copyVmtool",
+        "title": "Copy Arthas Vmtool"
+      },
+      {
+        "command": "advCopy.copyTimeTunnel",
+        "title": "Copy Arthas TimeTunnel"
+      },
+      {
+        "command": "advCopy.copyAsBean",
+        "title": "Copy as JSON"
+      },
+      {
+        "command": "advCopy.copySqlSelect",
+        "title": "Copy as SQL Select"
+      },
+      {
+        "command": "advCopy.copyPlainText",
+        "title": "Copy Pure Content"
+      },
+      {
+        "command": "advCopy.pastePlainText",
+        "title": "Paste as Java String"
+      },
+      {
+        "command": "advCopy.arthQuickMenu",
+        "title": "Copy More Arthas Commands"
+      }
+    ],
+    "menus": {
+      "advCopy.mainSubmenu": [
+        {
+          "command": "advCopy.copyReference",
+          "group": "1_path@1"
+        },
+        {
+          "command": "advCopy.copyRestPath",
+          "group": "1_path@2"
+        },
+        {
+          "command": "advCopy.copyVmtool",
+          "group": "2_arthas@1"
+        },
+        {
+          "command": "advCopy.copyTimeTunnel",
+          "group": "2_arthas@2"
+        },
+        {
+          "command": "advCopy.arthQuickMenu",
+          "group": "2_arthas@3"
+        },
+        {
+          "command": "advCopy.copyAsBean",
+          "group": "3_data@1"
+        },
+        {
+          "command": "advCopy.copySqlSelect",
+          "group": "3_data@2"
+        },
+        {
+          "command": "advCopy.copyPlainText",
+          "group": "4_text@1"
+        },
+        {
+          "command": "advCopy.pastePlainText",
+          "group": "4_text@2"
+        }
+      ],
+      "editor/context": [
+        {
+          "submenu": "advCopy.mainSubmenu",
+          "group": "9_cutcopypaste",
+          "when": "editorTextFocus"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "advCopy.copyReference",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.copyRestPath",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.copyAsBean",
+        "key": "ctrl+alt+j",
+        "mac": "cmd+alt+j",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.copyVmtool",
+        "key": "ctrl+alt+1",
+        "mac": "cmd+alt+1",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.copyTimeTunnel",
+        "key": "ctrl+alt+2",
+        "mac": "cmd+alt+2",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.copySqlSelect",
+        "key": "ctrl+alt+q",
+        "mac": "cmd+alt+q",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.copyPlainText",
+        "key": "ctrl+shift+c",
+        "mac": "cmd+shift+c",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "advCopy.pastePlainText",
+        "key": "ctrl+shift+v",
+        "mac": "cmd+shift+v",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "advCopy.arthQuickMenu",
+        "key": "ctrl+alt+3",
+        "mac": "cmd+alt+3",
+        "when": "editorTextFocus && editorLangId == java"
+      }
+    ]
+  },
+  "devDependencies": {
+    "sharp": "^0.34.5",
+    "vsce": "^2.15.0"
+  }
+}

@@ -1,0 +1,14 @@
+node_modules/
+*.vsix
+.vscode/
+.DS_Store
+*.log
+dist/
+package-lock.json
+yarn.lock
+.claude/
+.env
+.env.local
+*.swp
+*.swo
+*~
