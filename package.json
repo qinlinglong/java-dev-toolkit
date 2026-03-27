@@ -2,7 +2,7 @@
   "name": "advanced-copy-for-java",
   "displayName": "Advanced Copy for Java",
   "description": "Java 开发利器：支持复制引用路径、REST 接口路径、Arthas 命令生成及 JSON 结构重现。",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "publisher": "qinlinglong",
   "author": "qinlinglong",
   "icon": "logo-128.png",
@@ -61,6 +61,10 @@
       {
         "command": "advCopy.arthQuickMenu",
         "title": "Copy More Arthas Commands"
+      },
+      {
+        "command": "advCopy.navigateToController",
+        "title": "Navigate to Controller"
       }
     ],
     "menus": {
@@ -84,6 +88,10 @@
         {
           "command": "advCopy.arthQuickMenu",
           "group": "2_arthas@3"
+        },
+        {
+          "command": "advCopy.navigateToController",
+          "group": "2_arthas@4"
         },
         {
           "command": "advCopy.copyAsBean",
@@ -163,6 +171,12 @@
         "command": "advCopy.arthQuickMenu",
         "key": "ctrl+alt+3",
         "mac": "cmd+alt+3",
+        "when": "editorTextFocus && editorLangId == java"
+      },
+      {
+        "command": "advCopy.navigateToController",
+        "key": "ctrl+alt+n",
+        "mac": "cmd+alt+n",
         "when": "editorTextFocus && editorLangId == java"
       }
     ]

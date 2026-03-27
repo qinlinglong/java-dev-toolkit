@@ -43,36 +43,67 @@ const fieldTypeCache = new Map();
 const ARTHAS_COMMANDS = [
   // === 方法相关命令 ===
   { label: 'watch (监控参数返回值)', template: 'watch {className} {methodName} "{params, returnObj, throwExp}" -x 3', description: '监控方法的参数、返回值和异常', category: 'method' },
-  { label: 'watch (深度监控)', template: 'watch {className} {methodName} "{params, returnObj, throwExp}" -x 5', description: '深度监控方法，展开5层', category: 'method' },
+  { label: 'watch (深度监控)', template: 'watch {className} {methodName} "{params, returnObj, throwExp}" -x 4', description: '深度监控方法，展开4层（最大值）', category: 'method' },
   { label: 'watch (仅返回值)', template: 'watch {className} {methodName} "{returnObj}" -x 3', description: '仅监控返回值', category: 'method' },
-  { label: 'watch (条件监控)', template: 'watch {className} {methodName} "{params, returnObj}" condition=true -x 3', description: '条件过滤监控', category: 'method' },
-  { label: 'trace (调用链追踪)', template: 'trace {className} {methodName} -l 100', description: '追踪方法调用链，展示耗时', category: 'method' },
-  { label: 'trace (耗时统计)', template: 'trace {className} {methodName} -l 50 --invoke-detail', description: '追踪并显示调用详情', category: 'method' },
+  { label: 'watch (调用前)', template: 'watch {className} {methodName} "{params}" -b -x 3', description: '监控方法调用前的参数', category: 'method' },
+  { label: 'watch (异常监控)', template: 'watch {className} {methodName} "{throwExp}" -e -x 3', description: '监控方法抛出的异常', category: 'method' },
+  { label: 'watch (条件监控)', template: 'watch {className} {methodName} "{params, returnObj}" -x 3 "#cost>10"', description: '条件过滤监控（耗时>10ms）', category: 'method' },
+  { label: 'trace (调用链追踪)', template: 'trace {className} {methodName} -n 100', description: '追踪方法调用链，展示耗时', category: 'method' },
+  { label: 'trace (耗时统计)', template: 'trace {className} {methodName} -n 50 --invoke-detail', description: '追踪并显示调用详情', category: 'method' },
+  { label: 'trace (性能过滤)', template: 'trace {className} {methodName} "#cost>100"', description: '只追踪耗时大于100ms的调用', category: 'method' },
   { label: 'stack (调用堆栈)', template: 'stack {className} {methodName}', description: '查看方法的调用堆栈', category: 'method' },
-  { label: 'stack (条件堆栈)', template: 'stack {className} {methodName} condition=true', description: '条件过滤的堆栈信息', category: 'method' },
-  { label: 'monitor (监控统计)', template: 'monitor -c 5 {className} {methodName}', description: '监控方法的执行统计信息', category: 'method' },
-  { label: 'sm (搜索方法)', template: 'sm -l {className} {methodName}', description: '搜索方法的详细信息', category: 'method' },
-  { label: 'ognl (执行OGNL)', template: 'ognl -x 3 @{className}@<staticField>', description: '通过OGNL执行表达式', category: 'method' },
+  { label: 'stack (条件堆栈)', template: 'stack {className} {methodName} "#cost>50"', description: '条件过滤的堆栈信息', category: 'method' },
+  { label: 'monitor (监控统计)', template: 'monitor {className} {methodName} -c 5', description: '每5秒输出一次方法执行统计信息', category: 'method' },
+  { label: 'monitor (自定义周期)', template: 'monitor {className} {methodName} -c 10', description: '每10秒输出一次统计信息', category: 'method' },
+  { label: 'sm (搜索方法)', template: 'sm {className} {methodName}', description: '搜索并列出方法名和描述符', category: 'method' },
+  { label: 'sm (详细搜索)', template: 'sm -d {className} {methodName}', description: '搜索方法并显示详细信息', category: 'method' },
+  { label: 'tt (时间隧道)', template: 'tt -t {className} {methodName} -n 100', description: '记录方法调用的参数和返回值', category: 'method' },
+  { label: 'tt (查看记录)', template: 'tt -i 0', description: '查看第0条记录的详细信息', category: 'method' },
+  { label: 'tt (重放调用)', template: 'tt -p 0', description: '重放第0条记录的方法调用', category: 'method' },
+  { label: 'tt (搜索记录)', template: 'tt -s "params[0]<0"', description: '使用条件搜索记录', category: 'method' },
+  { label: 'ognl (执行OGNL表达式)', template: 'ognl -x 3 @{className}@<staticField>', description: '通过OGNL执行表达式', category: 'method' },
+  { label: 'ognl (获取对象属性)', template: 'ognl @{className}@getInstance().fieldName', description: '获取对象的属性值', category: 'method' },
+  { label: 'getstatic (获取静态字段)', template: 'getstatic {className} fieldName', description: '获取类的静态字段值', category: 'method' },
 
   // === 类相关命令 ===
   { label: 'jad (反编译类)', template: 'jad {className}', description: '反编译指定的Java类', category: 'class' },
   { label: 'jad (反编译方法)', template: 'jad {className} {methodName}', description: '仅反编译指定方法', category: 'class' },
-  { label: 'sc (搜索类)', template: 'sc -d {className}', description: '搜索并显示类详细信息', category: 'class' },
+  { label: 'sc (搜索类)', template: 'sc {className}', description: '搜索并显示类信息', category: 'class' },
+  { label: 'sc (详细搜索)', template: 'sc -d {className}', description: '搜索类并显示详细信息', category: 'class' },
   { label: 'sc (模糊搜索)', template: 'sc -d *{className}*', description: '模糊搜索类', category: 'class' },
+  { label: 'sc (搜索接口实现)', template: 'sc -d *implements java.io.Serializable', description: '搜索实现某接口的类', category: 'class' },
   { label: 'classloader (列出加载器)', template: 'classloader -l', description: '列出所有类加载器', category: 'class' },
+  { label: 'classloader (类加载详情)', template: 'classloader -c <classloaderHash>', description: '显示特定类加载器的信息', category: 'class' },
+  { label: 'classloader (查找资源)', template: 'classloader -r java/lang/String.class', description: '查找资源位置', category: 'class' },
   { label: 'dump (转储类)', template: 'dump {className}', description: '转储已加载的类', category: 'class' },
-  { label: 'redefine (重新定义)', template: 'redefine /tmp/{className}.class', description: '使用新的class文件重新定义类', category: 'class' },
+  { label: 'dump (转储到指定目录)', template: 'dump {className} /tmp', description: '转储类到指定目录', category: 'class' },
+  { label: 'redefine (重新定义类)', template: 'redefine /tmp/{className}.class', description: '使用新的class文件重新定义类', category: 'class' },
+  { label: 'mbean (JMX查询)', template: 'mbean', description: '列出JMX beans信息', category: 'class' },
 
   // === 全局命令 ===
   { label: 'sysprop (系统属性)', template: 'sysprop', description: '查看JVM系统属性', category: 'global' },
-  { label: 'thread (线程信息)', template: 'thread -all', description: '查看所有线程信息', category: 'global' },
+  { label: 'sysprop (查询属性)', template: 'sysprop java.version', description: '查询特定系统属性值', category: 'global' },
+  { label: 'sysprop (设置属性)', template: 'sysprop <key> <value>', description: '设置系统属性（需要权限）', category: 'global' },
+  { label: 'thread (线程信息)', template: 'thread', description: '查看当前线程信息', category: 'global' },
+  { label: 'thread (全部线程)', template: 'thread -all', description: '查看所有线程信息', category: 'global' },
   { label: 'thread (死锁检测)', template: 'thread --state BLOCKED', description: '查找阻塞的线程', category: 'global' },
-  { label: 'thread (按CPU排序)', template: 'thread -n 3 --cpu', description: '按CPU使用率排序线程', category: 'global' },
+  { label: 'thread (按CPU排序)', template: 'thread -n 3 --cpu', description: '按CPU使用率排序的前3个线程', category: 'global' },
+  { label: 'thread (指定线程ID)', template: 'thread <threadId>', description: '查看指定线程的详细信息', category: 'global' },
   { label: 'jvm (JVM信息)', template: 'jvm', description: '查看JVM基本信息', category: 'global' },
-  { label: 'dashboard (仪表板)', template: 'dashboard -n 1', description: '实时显示仪表板', category: 'global' },
+  { label: 'dashboard (仪表板)', template: 'dashboard', description: '实时显示仪表板', category: 'global' },
+  { label: 'dashboard (指定刷新)', template: 'dashboard -n 1', description: '仪表板显示1次后退出', category: 'global' },
   { label: 'heapdump (堆转储)', template: 'heapdump /tmp/heapdump.hprof', description: '生成堆转储文件', category: 'global' },
+  { label: 'heapdump (强制转储)', template: 'heapdump --live /tmp/heapdump.hprof', description: '仅转储活跃对象', category: 'global' },
   { label: 'histogram (对象统计)', template: 'histogram', description: '统计对象个数和内存占用', category: 'global' },
-  { label: 'vmtool (强制GC)', template: 'vmtool --action forceGc', description: '触发垃圾回收', category: 'global' }
+  { label: 'histogram (实时更新)', template: 'histogram -n 20', description: '显示前20个对象，每秒更新', category: 'global' },
+  { label: 'vmtool (强制GC)', template: 'vmtool --action forceGc', description: '触发垃圾回收', category: 'global' },
+  { label: 'vmtool (获取实例)', template: 'vmtool --action forceGc --className {className}', description: '获取指定类的实例', category: 'global' },
+  { label: 'vmoption (查看VM选项)', template: 'vmoption', description: '查看所有JVM参数', category: 'global' },
+  { label: 'vmoption (查询选项)', template: 'vmoption PrintGCDetails', description: '查询特定JVM参数值', category: 'global' },
+  { label: 'vmoption (修改选项)', template: 'vmoption PrintGC true', description: '修改JVM参数', category: 'global' },
+  { label: 'perfcounter (性能计数)', template: 'perfcounter', description: '查看JVM内置的性能计数器', category: 'global' },
+  { label: 'profiler (采样器)', template: 'profiler start', description: '启动CPU采样', category: 'global' },
+  { label: 'profiler (停止采样)', template: 'profiler stop --format html', description: '停止采样并生成HTML报告', category: 'global' }
 ];
 
 // ============== 通用工具函数 ==============
@@ -435,6 +466,166 @@ async function showArthasQuickPick() {
         );
         await vscode.env.clipboard.writeText(finalCommand);
         vscode.window.showInformationMessage(`✅ Arthas 命令已复制: ${finalCommand}`);
+    }
+}
+
+// ============== Controller 导航工具函数 ==============
+
+/**
+ * 解析 Java 文件，提取所有 Controller 方法及其路径
+ * @param {string} filePath - Java 文件路径
+ * @returns {Promise<{package: string, className: string, classPath: string, methods: Array}>}
+ */
+async function parseJavaFileForControllers(filePath) {
+    const uri = vscode.Uri.file(filePath);
+    const document = await vscode.workspace.openTextDocument(uri);
+    const text = document.getText();
+
+    // 提取包名
+    const packageMatch = text.match(/^package\s+([\w.]+)\s*;/m);
+    const packageName = packageMatch ? packageMatch[1] : '';
+
+    // 提取类名
+    const classMatch = text.match(/(?:public\s+)?(?:class|interface)\s+(\w+)/);
+    const className = classMatch ? classMatch[1] : '';
+
+    // 提取类级 @RequestMapping 路径
+    const classPathMatch = text.match(/@RequestMapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+    const classPath = classPathMatch ? classPathMatch[1] : '';
+
+    const methods = [];
+
+    // 按行遍历，查找所有方法的 @RequestMapping 等注解
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+
+        // 匹配方法级的 Mapping 注解
+        const methodMapMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+
+        if (methodMapMatch) {
+            const methodPath = methodMapMatch[1];
+
+            // 向下查找方法名（最多查找5行）
+            let methodName = '';
+            for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+                const methodLine = lines[j];
+                const methodMatch = methodLine.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:synchronized)?\s*[\w<>.*]+\s+(\w+)\s*\(/);
+                if (methodMatch) {
+                    methodName = methodMatch[1];
+                    break;
+                }
+            }
+
+            if (methodName) {
+                // 组装完整路径
+                const cleanPath = (p) => p ? p.replace(/^\/*|\/*$/g, '') : '';
+                const cPart = cleanPath(classPath);
+                const mPart = cleanPath(methodPath);
+                const fullPath = `/${[cPart, mPart].filter(Boolean).join('/')}`;
+
+                methods.push({
+                    name: methodName,
+                    path: methodPath,
+                    fullPath: fullPath,
+                    line: i,
+                    range: new vscode.Range(i, 0, i, line.length)
+                });
+            }
+        }
+    }
+
+    return {
+        package: packageName,
+        className: className,
+        classPath: classPath,
+        methods: methods,
+        document: document
+    };
+}
+
+/**
+ * 从工作区中查找匹配指定 REST 路径的 Controller
+ * @param {string} inputPath - 用户输入的 REST 路径（如 `/api/user/list`）
+ * @returns {Promise<Array>} 匹配的 Controller 列表
+ */
+async function findControllersByPath(inputPath) {
+    const matches = [];
+
+    // 查找所有 Java 文件
+    const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
+
+    for (const fileUri of javaFiles) {
+        try {
+            const filePath = fileUri.fsPath;
+            const result = await parseJavaFileForControllers(filePath);
+
+            // 对每个方法进行路径匹配
+            for (const method of result.methods) {
+                let isMatch = false;
+                let matchType = '';
+
+                // 1. 精确匹配
+                if (method.fullPath === inputPath) {
+                    isMatch = true;
+                    matchType = 'exact';
+                } else {
+                    // 2. 前缀匹配（输入路径是完整路径的前缀）
+                    if (method.fullPath.startsWith(inputPath)) {
+                        isMatch = true;
+                        matchType = 'prefix';
+                    }
+                }
+
+                if (isMatch) {
+                    matches.push({
+                        file: fileUri,
+                        package: result.package,
+                        className: result.className,
+                        methodName: method.name,
+                        fullPath: method.fullPath,
+                        line: method.line,
+                        label: `${result.className}.${method.name}()`,
+                        matchType: matchType,
+                        document: result.document
+                    });
+                }
+            }
+        } catch (error) {
+            // 跳过无法解析的文件
+            console.warn(`Could not parse ${fileUri.fsPath}: ${error.message}`);
+        }
+    }
+
+    // 按匹配优先级排序（精确匹配优先）
+    matches.sort((a, b) => {
+        if (a.matchType === 'exact' && b.matchType !== 'exact') return -1;
+        if (a.matchType !== 'exact' && b.matchType === 'exact') return 1;
+        return 0;
+    });
+
+    return matches;
+}
+
+/**
+ * 打开文件并导航到指定行
+ * @param {Object} match - 匹配结果对象
+ * @param {vscode.Uri} match.file - 文件 URI
+ * @param {number} match.line - 行号
+ */
+async function openControllerAtLine(match) {
+    try {
+        const editor = await vscode.window.showTextDocument(match.file, {
+            selection: new vscode.Range(match.line, 0, match.line, 0)
+        });
+
+        // 将行置于编辑器中心
+        editor.revealRange(
+            new vscode.Range(match.line, 0, match.line, 0),
+            vscode.TextEditorRevealType.InCenter
+        );
+    } catch (error) {
+        vscode.window.showErrorMessage(`❌ 无法打开文件: ${error.message}`);
     }
 }
 
@@ -1376,8 +1567,15 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
         }
     }
 
-    // 降级方案：只有在 Symbol 提供者完全失败时才进入（没有找到类或表名）
-    if (!foundClass || !tableName) {
+    // 降级方案：只有在 Symbol 提供者完全失败或没有找到字段时才进入
+    // 关键修复：即使找到类，如果没有字段也应该进行文本匹配补救
+    if (!foundClass || !tableName || columns.length === 0) {
+        // 如果符号提供者找到了类但没有字段，清空 columns 防止混合结果
+        if (columns.length === 0) {
+            columns = [];
+            useWildcard = false;
+        }
+
         const fullText = document.getText();
         const lines = fullText.split('\n');
         const cursorLine = selection.active.line;
@@ -1466,6 +1664,11 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                             columns.push(toSnakeCase(fieldName));
                         }
                     }
+
+                    // 如果仍然没有找到任何基础类型字段，标记为使用通配符
+                    if (columns.length === 0) {
+                        useWildcard = true;
+                    }
                 }
             } else {
                 // 划选模式：只复制选中范围内的基础类型字段
@@ -1529,7 +1732,73 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
         await showArthasQuickPick();
     });
 
-    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand);
+    // [功能 9] 按 REST 路径导航到 Controller
+    let navigateToController = vscode.commands.registerCommand('advCopy.navigateToController', async () => {
+        try {
+            // 1. 读取剪贴板
+            const clipboardText = await vscode.env.clipboard.readText();
+            if (!clipboardText || !clipboardText.trim()) {
+                vscode.window.showErrorMessage('❌ 剪贴板为空或不是有效的 REST 路径');
+                return;
+            }
+
+            const inputPath = clipboardText.trim();
+
+            // 验证是否为有效的 REST 路径
+            if (!inputPath.startsWith('/')) {
+                vscode.window.showErrorMessage('❌ 请确保输入的是 REST 路径（如 /api/user/list）');
+                return;
+            }
+
+            // 2. 查询工作区中的 Java 文件
+            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+            if (!workspaceFolder) {
+                vscode.window.showErrorMessage('❌ 请在打开的工作区中使用此功能');
+                return;
+            }
+
+            // 显示进度提示
+            vscode.window.showInformationMessage('🔍 正在搜索匹配的 Controller...');
+
+            // 3. 调用 findControllersByPath() 查找匹配的 Controller
+            const matches = await findControllersByPath(inputPath);
+
+            if (matches.length === 0) {
+                vscode.window.showErrorMessage(`❌ 未在项目中找到匹配的 Controller（查找路径：${inputPath}）`);
+                return;
+            }
+
+            // 4. 处理结果
+            if (matches.length === 1) {
+                // 唯一匹配：直接打开
+                const match = matches[0];
+                await openControllerAtLine(match);
+                vscode.window.showInformationMessage(`✅ 已打开 Controller: ${match.className}.${match.methodName}()`);
+            } else {
+                // 多个匹配：显示快速选择菜单
+                const quickPickItems = matches.map(m => ({
+                    label: `${m.className}.${m.methodName}()`,
+                    description: m.fullPath,
+                    detail: `${m.package} (line ${m.line + 1})`,
+                    match: m
+                }));
+
+                const selected = await vscode.window.showQuickPick(quickPickItems, {
+                    placeHolder: '选择要打开的 Controller'
+                });
+
+                if (selected) {
+                    await openControllerAtLine(selected.match);
+                    vscode.window.showInformationMessage(`✅ 已打开 Controller: ${selected.match.className}.${selected.match.methodName}()`);
+                }
+            }
+        } catch (error) {
+            vscode.window.showErrorMessage(`❌ 错误: ${error.message}`);
+            console.error('navigateToController error:', error);
+        }
+    });
+
+    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController);
 }
 
 function deactivate() {}
