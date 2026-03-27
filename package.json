@@ -2,7 +2,7 @@
   "name": "advanced-copy-for-java",
   "displayName": "Advanced Copy for Java",
   "description": "Java 开发利器：支持复制引用路径、REST 接口路径、Arthas 命令生成及 JSON 结构重现。",
-  "version": "1.3.1",
+  "version": "1.3.2",
   "publisher": "qinlinglong",
   "author": "qinlinglong",
   "icon": "logo-128.png",

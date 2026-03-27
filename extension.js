@@ -31,6 +31,11 @@ const TYPE_CATEGORIES = {
 const symbolCache = new Map();
 const fieldTypeCache = new Map();
 
+// Controller 路径索引缓存（用于加速搜索）
+const controllerPathIndex = new Map(); // 格式：path -> [{file, className, methodName, line, ...}]
+let controllerIndexInitialized = false;
+let controllerIndexBuildTime = 0;  // 上次构建时间
+
 // ============== Arthas 命令库 ==============
 /**
  * @typedef {Object} ArthasCommand
@@ -472,6 +477,141 @@ async function showArthasQuickPick() {
 // ============== Controller 导航工具函数 ==============
 
 /**
+ * 从用户输入解析出 REST 路径（支持完整 URL）
+ * 输入示例：
+ *   - /api/user/list                           → /api/user/list
+ *   - /api/users/{id}                          → /api/users/{id}
+ *   - http://api.example.com/api/user/list     → /api/user/list
+ *   - https://api.example.com:8080/api/user    → /api/user
+ *   - http://localhost:3000/api/user?page=1   → /api/user
+ * @param {string} input - 用户输入
+ * @returns {{path: string, isValid: boolean, error?: string}}
+ */
+function parseRestPathFromInput(input) {
+    if (!input || !input.trim()) {
+        return { isValid: false, error: '输入不能为空', path: '' };
+    }
+
+    let restPath = input.trim();
+    let isFullUrl = false;
+
+    // 判断是否为完整 URL（以 http:// 或 https:// 开头）
+    if (restPath.startsWith('http://') || restPath.startsWith('https://')) {
+        isFullUrl = true;
+        try {
+            // 解析 URL
+            const url = new URL(restPath);
+            // 提取 pathname 部分（自动去掉 query 和 hash）
+            restPath = url.pathname;
+
+            // 验证是否以 / 开头且至少有路径部分
+            if (!restPath || restPath === '/') {
+                return {
+                    isValid: false,
+                    error: 'URL 中未找到有效的 API 路径',
+                    path: ''
+                };
+            }
+        } catch (e) {
+            return {
+                isValid: false,
+                error: 'URL 格式无效',
+                path: ''
+            };
+        }
+    } else {
+        // 非 URL 形式，直接验证是否为有效 REST 路径
+        if (!restPath.startsWith('/')) {
+            return {
+                isValid: false,
+                error: 'REST 路径必须以 / 开头',
+                path: ''
+            };
+        }
+
+        // 去掉 query 和 hash 部分（如果有）
+        restPath = restPath.split('?')[0].split('#')[0];
+    }
+
+    return {
+        isValid: true,
+        path: restPath,
+        fromUrl: isFullUrl
+    };
+}
+
+/**
+ * 构建或更新 Controller REST 路径索引
+ * 扫描所有 Java 文件，提取所有 REST 路径，构建快速查询索引
+ * @returns {Promise<{count: number, time: number}>}
+ */
+async function buildControllerPathIndex() {
+    const startTime = Date.now();
+    controllerPathIndex.clear();
+
+    // 显示构建进度
+    const result = await vscode.window.withProgress(
+        {
+            location: vscode.ProgressLocation.Notification,
+            title: '📑 构建 Controller 索引...',
+            cancellable: false
+        },
+        async (progress) => {
+            // 查找所有 Java 文件
+            const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
+
+            let processedCount = 0;
+
+            for (const fileUri of javaFiles) {
+                try {
+                    const parseResult = await parseJavaFileForControllers(fileUri.fsPath);
+
+                    // 为每个方法构建路径索引
+                    for (const method of parseResult.methods) {
+                        const path = method.fullPath;
+
+                        if (!controllerPathIndex.has(path)) {
+                            controllerPathIndex.set(path, []);
+                        }
+
+                        controllerPathIndex.get(path).push({
+                            file: fileUri,
+                            package: parseResult.package,
+                            className: parseResult.className,
+                            methodName: method.name,
+                            line: method.line
+                        });
+                    }
+
+                    processedCount++;
+                    // 每处理 10 个文件更新一次进度
+                    if (processedCount % 10 === 0) {
+                        progress.report({
+                            increment: 1,
+                            message: `已扫描 ${processedCount}/${javaFiles.length} 个文件...`
+                        });
+                    }
+                } catch (error) {
+                    console.warn(`Could not parse ${fileUri.fsPath}: ${error.message}`);
+                }
+            }
+
+            progress.report({ increment: 100 });
+            return { count: controllerPathIndex.size, filesCount: javaFiles.length };
+        }
+    );
+
+    const buildTime = Date.now() - startTime;
+    controllerIndexInitialized = true;
+    controllerIndexBuildTime = Date.now();
+
+    return {
+        count: result.count,
+        time: buildTime
+    };
+}
+
+/**
  * 解析 Java 文件，提取所有 Controller 方法及其路径
  * @param {string} filePath - Java 文件路径
  * @returns {Promise<{package: string, className: string, classPath: string, methods: Array}>}
@@ -545,36 +685,74 @@ async function parseJavaFileForControllers(filePath) {
 }
 
 /**
- * 从工作区中查找匹配指定 REST 路径的 Controller
- * @param {string} inputPath - 用户输入的 REST 路径（如 `/api/user/list`）
+ * 从工作区中查找匹配指定 REST 路径的 Controller（优先使用缓存）
+ * @param {string} inputPath - 用户输入的 REST 路径
+ * @param {boolean} useCache - 是否使用缓存（默认使用）
  * @returns {Promise<Array>} 匹配的 Controller 列表
  */
-async function findControllersByPath(inputPath) {
+async function findControllersByPath(inputPath, useCache = true) {
     const matches = [];
 
-    // 查找所有 Java 文件
+    // 策略1：精确匹配（快速）
+    if (useCache && controllerPathIndex.has(inputPath)) {
+        return controllerPathIndex.get(inputPath).map(item => ({
+            file: item.file,
+            package: item.package,
+            className: item.className,
+            methodName: item.methodName,
+            fullPath: inputPath,
+            line: item.line,
+            matchType: 'exact'
+        }));
+    }
+
+    // 策略2：前缀匹配（使用缓存索引）
+    if (useCache && controllerIndexInitialized) {
+        for (const [path, items] of controllerPathIndex) {
+            if (path.startsWith(inputPath)) {
+                matches.push(...items.map(item => ({
+                    file: item.file,
+                    package: item.package,
+                    className: item.className,
+                    methodName: item.methodName,
+                    fullPath: path,
+                    line: item.line,
+                    matchType: 'prefix'
+                })));
+            }
+        }
+
+        // 如果找到匹配项，直接返回
+        if (matches.length > 0) {
+            return matches.sort((a, b) => {
+                // 优先级排序：精确 > 前缀
+                if (a.fullPath === inputPath) return -1;
+                if (b.fullPath === inputPath) return 1;
+                return 0;
+            });
+        }
+    }
+
+    // 策略3：缓存未初始化或缓存未找到，进行完整搜索
+    // （仅在初次使用或文件变化时触发）
+    console.log('缓存未命中或未初始化，执行完整搜索...');
+
     const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
 
     for (const fileUri of javaFiles) {
         try {
-            const filePath = fileUri.fsPath;
-            const result = await parseJavaFileForControllers(filePath);
+            const result = await parseJavaFileForControllers(fileUri.fsPath);
 
-            // 对每个方法进行路径匹配
             for (const method of result.methods) {
                 let isMatch = false;
                 let matchType = '';
 
-                // 1. 精确匹配
                 if (method.fullPath === inputPath) {
                     isMatch = true;
                     matchType = 'exact';
-                } else {
-                    // 2. 前缀匹配（输入路径是完整路径的前缀）
-                    if (method.fullPath.startsWith(inputPath)) {
-                        isMatch = true;
-                        matchType = 'prefix';
-                    }
+                } else if (method.fullPath.startsWith(inputPath)) {
+                    isMatch = true;
+                    matchType = 'prefix';
                 }
 
                 if (isMatch) {
@@ -585,19 +763,16 @@ async function findControllersByPath(inputPath) {
                         methodName: method.name,
                         fullPath: method.fullPath,
                         line: method.line,
-                        label: `${result.className}.${method.name}()`,
-                        matchType: matchType,
-                        document: result.document
+                        matchType: matchType
                     });
                 }
             }
         } catch (error) {
-            // 跳过无法解析的文件
             console.warn(`Could not parse ${fileUri.fsPath}: ${error.message}`);
         }
     }
 
-    // 按匹配优先级排序（精确匹配优先）
+    // 结果排序
     matches.sort((a, b) => {
         if (a.matchType === 'exact' && b.matchType !== 'exact') return -1;
         if (a.matchType !== 'exact' && b.matchType === 'exact') return 1;
@@ -1735,47 +1910,64 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
     // [功能 9] 按 REST 路径导航到 Controller
     let navigateToController = vscode.commands.registerCommand('advCopy.navigateToController', async () => {
         try {
-            // 1. 读取剪贴板
+            // 1. 从剪贴板读取默认值
             const clipboardText = await vscode.env.clipboard.readText();
-            if (!clipboardText || !clipboardText.trim()) {
-                vscode.window.showErrorMessage('❌ 剪贴板为空或不是有效的 REST 路径');
+
+            // 2. 显示输入框（带剪贴板默认值）
+            const userInput = await vscode.window.showInputBox({
+                placeHolder: '输入 REST 路径或完整 URL（如 /api/user/list 或 http://api.example.com:8080/api/user/list）',
+                value: clipboardText && clipboardText.trim().startsWith('/') ? clipboardText.trim() : '',
+                prompt: '粘贴 REST API 路径或 URL，自动提取并查找对应的 Controller'
+            });
+
+            // 用户取消输入
+            if (!userInput) return;
+
+            // 3. 解析输入（支持 URL）
+            const parseResult = parseRestPathFromInput(userInput);
+
+            if (!parseResult.isValid) {
+                vscode.window.showErrorMessage(`❌ ${parseResult.error}`);
                 return;
             }
 
-            const inputPath = clipboardText.trim();
+            const inputPath = parseResult.path;
 
-            // 验证是否为有效的 REST 路径
-            if (!inputPath.startsWith('/')) {
-                vscode.window.showErrorMessage('❌ 请确保输入的是 REST 路径（如 /api/user/list）');
-                return;
-            }
-
-            // 2. 查询工作区中的 Java 文件
+            // 4. 工作区检查
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
             if (!workspaceFolder) {
                 vscode.window.showErrorMessage('❌ 请在打开的工作区中使用此功能');
                 return;
             }
 
-            // 显示进度提示
-            vscode.window.showInformationMessage('🔍 正在搜索匹配的 Controller...');
+            // 5. 首次使用或缓存过期时，构建索引
+            if (!controllerIndexInitialized) {
+                const buildResult = await buildControllerPathIndex();
+                vscode.window.showInformationMessage(
+                    `✅ 索引已构建：${buildResult.count} 条路径（耗时 ${buildResult.time}ms）`
+                );
+            } else {
+                vscode.window.showInformationMessage('🔍 使用缓存搜索中...');
+            }
 
-            // 3. 调用 findControllersByPath() 查找匹配的 Controller
-            const matches = await findControllersByPath(inputPath);
+            // 6. 搜索匹配的 Controller（使用缓存）
+            const matches = await findControllersByPath(inputPath, true);
 
             if (matches.length === 0) {
-                vscode.window.showErrorMessage(`❌ 未在项目中找到匹配的 Controller（查找路径：${inputPath}）`);
+                vscode.window.showErrorMessage(
+                    `❌ 未找到匹配的 Controller（查找路径：${inputPath}）`
+                );
                 return;
             }
 
-            // 4. 处理结果
+            // 7. 处理结果
             if (matches.length === 1) {
-                // 唯一匹配：直接打开
                 const match = matches[0];
                 await openControllerAtLine(match);
-                vscode.window.showInformationMessage(`✅ 已打开 Controller: ${match.className}.${match.methodName}()`);
+                vscode.window.showInformationMessage(
+                    `✅ 已打开 Controller: ${match.className}.${match.methodName}()`
+                );
             } else {
-                // 多个匹配：显示快速选择菜单
                 const quickPickItems = matches.map(m => ({
                     label: `${m.className}.${m.methodName}()`,
                     description: m.fullPath,
@@ -1789,7 +1981,9 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
 
                 if (selected) {
                     await openControllerAtLine(selected.match);
-                    vscode.window.showInformationMessage(`✅ 已打开 Controller: ${selected.match.className}.${selected.match.methodName}()`);
+                    vscode.window.showInformationMessage(
+                        `✅ 已打开 Controller: ${selected.match.className}.${selected.match.methodName}()`
+                    );
                 }
             }
         } catch (error) {
@@ -1798,7 +1992,34 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
         }
     });
 
-    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController);
+    // 添加文件监听器（工作区文件变化检测）
+    const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
+
+    fileWatcher.onDidCreate(() => {
+        // 新增 Java 文件，标记缓存需要更新
+        if (controllerIndexInitialized) {
+            console.log('检测到新增 Java 文件，将在下次搜索时更新缓存...');
+            controllerIndexInitialized = false;  // 标记缓存为陈旧
+        }
+    });
+
+    fileWatcher.onDidChange(() => {
+        // 文件被修改，标记缓存需要更新
+        if (controllerIndexInitialized) {
+            console.log('检测到 Java 文件修改，将在下次搜索时更新缓存...');
+            controllerIndexInitialized = false;
+        }
+    });
+
+    fileWatcher.onDidDelete(() => {
+        // 文件被删除，标记缓存需要更新
+        if (controllerIndexInitialized) {
+            console.log('检测到 Java 文件删除，将在下次搜索时更新缓存...');
+            controllerIndexInitialized = false;
+        }
+    });
+
+    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, fileWatcher);
 }
 
 function deactivate() {}
