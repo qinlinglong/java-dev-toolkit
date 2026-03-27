@@ -695,7 +695,7 @@ async function findControllersByPath(inputPath, useCache = true) {
 
     // 策略1：精确匹配（快速）
     if (useCache && controllerPathIndex.has(inputPath)) {
-        return controllerPathIndex.get(inputPath).map(item => ({
+        const result = controllerPathIndex.get(inputPath).map(item => ({
             file: item.file,
             package: item.package,
             className: item.className,
@@ -704,12 +704,23 @@ async function findControllersByPath(inputPath, useCache = true) {
             line: item.line,
             matchType: 'exact'
         }));
+        // 添加搜索元数据
+        result._searchInfo = {
+            fromCache: true,
+            indexSize: controllerPathIndex.size,
+            searchType: 'exact'
+        };
+        return result;
     }
 
     // 策略2：前缀匹配（使用缓存索引）
     if (useCache && controllerIndexInitialized) {
         for (const [path, items] of controllerPathIndex) {
-            if (path.startsWith(inputPath)) {
+            // 检查是否为前缀匹配：路径必须相等或者输入是路径的前缀且后面跟 /
+            const isPrefix = path === inputPath ||
+                             (path.startsWith(inputPath) && path[inputPath.length] === '/');
+
+            if (isPrefix) {
                 matches.push(...items.map(item => ({
                     file: item.file,
                     package: item.package,
@@ -717,19 +728,26 @@ async function findControllersByPath(inputPath, useCache = true) {
                     methodName: item.methodName,
                     fullPath: path,
                     line: item.line,
-                    matchType: 'prefix'
+                    matchType: path === inputPath ? 'exact' : 'prefix'
                 })));
             }
         }
 
         // 如果找到匹配项，直接返回
         if (matches.length > 0) {
-            return matches.sort((a, b) => {
+            const sorted = matches.sort((a, b) => {
                 // 优先级排序：精确 > 前缀
                 if (a.fullPath === inputPath) return -1;
                 if (b.fullPath === inputPath) return 1;
                 return 0;
             });
+            // 添加搜索元数据
+            sorted._searchInfo = {
+                fromCache: true,
+                indexSize: controllerPathIndex.size,
+                searchType: 'prefix'
+            };
+            return sorted;
         }
     }
 
@@ -738,6 +756,7 @@ async function findControllersByPath(inputPath, useCache = true) {
     console.log('缓存未命中或未初始化，执行完整搜索...');
 
     const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
+    const searchStartTime = Date.now();
 
     for (const fileUri of javaFiles) {
         try {
@@ -750,7 +769,8 @@ async function findControllersByPath(inputPath, useCache = true) {
                 if (method.fullPath === inputPath) {
                     isMatch = true;
                     matchType = 'exact';
-                } else if (method.fullPath.startsWith(inputPath)) {
+                } else if (method.fullPath.startsWith(inputPath) && method.fullPath[inputPath.length] === '/') {
+                    // 前缀匹配：输入是路径的前缀且后面跟 /
                     isMatch = true;
                     matchType = 'prefix';
                 }
@@ -778,6 +798,15 @@ async function findControllersByPath(inputPath, useCache = true) {
         if (a.matchType !== 'exact' && b.matchType === 'exact') return 1;
         return 0;
     });
+
+    // 添加搜索元数据用于错误消息
+    const searchTime = Date.now() - searchStartTime;
+    matches._searchInfo = {
+        fromCache: false,
+        filesScanned: javaFiles.length,
+        searchTime: searchTime,
+        indexSize: controllerPathIndex.size
+    };
 
     return matches;
 }
@@ -1954,9 +1983,32 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
             const matches = await findControllersByPath(inputPath, true);
 
             if (matches.length === 0) {
-                vscode.window.showErrorMessage(
-                    `❌ 未找到匹配的 Controller（查找路径：${inputPath}）`
-                );
+                // 构建详细的错误消息
+                let errorMsg = `❌ 未找到匹配的 Controller（查找路径：${inputPath}）\n\n`;
+
+                if (matches._searchInfo) {
+                    const info = matches._searchInfo;
+                    if (info.fromCache) {
+                        errorMsg += `📊 使用缓存搜索\n`;
+                        errorMsg += `   索引包含 ${info.indexSize} 条 REST 路径\n`;
+                    } else {
+                        errorMsg += `🔍 全量搜索\n`;
+                        errorMsg += `   扫描 ${info.filesScanned} 个 Java 文件\n`;
+                        errorMsg += `   耗时 ${info.searchTime}ms\n`;
+                        if (info.indexSize > 0) {
+                            errorMsg += `   找到 ${info.indexSize} 条 REST 路径，但无匹配项\n`;
+                        } else {
+                            errorMsg += `   未在项目中找到任何 REST Controller\n`;
+                        }
+                    }
+                }
+
+                errorMsg += `\n💡 排查建议：\n`;
+                errorMsg += `   • 检查输入路径格式是否正确 (如 /api/user/list)\n`;
+                errorMsg += `   • 确保方法有 @RequestMapping/@GetMapping 等注解\n`;
+                errorMsg += `   • 确保类有 @RestController/@Controller 注解`;
+
+                vscode.window.showErrorMessage(errorMsg);
                 return;
             }
 
