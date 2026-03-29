@@ -93,45 +93,80 @@ const CHANGED_FILES = new Set();      // 追踪变化的文件
 function saveCache() {
     if (!controllerIndexInitialized) return;
 
+    const currentWorkspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+
     const cacheData = {
         timestamp: Date.now(),
+        workspacePath: currentWorkspacePath,  // ✅ 记录工作区路径，用于隔离检查
         indexSize: controllerPathIndex.size,
         pathIndex: Array.from(controllerPathIndex.entries()),
         layeredIndex: controllerLayeredIndex,
         suffixIndexL1: Array.from(suffixIndexL1.entries())
     };
 
-    // 保存到磁盘（只用磁盘缓存，工作区隔离）
+    // 1️⃣ 保存到磁盘（始终保存，作为备份）
     try {
         fs.writeFileSync(DISK_CACHE_PATH, JSON.stringify(cacheData), 'utf8');
-        console.log(`💾 Controller 索引已保存到磁盘 (${cacheData.indexSize} 条路径, 工作区隔离)`);
+        console.log(`💾 Controller 索引已保存到磁盘 (${cacheData.indexSize} 条路径)`);
     } catch (error) {
         console.warn('磁盘缓存保存失败：', error.message);
+    }
+
+    // 2️⃣ 备份到 globalState（快速启动，含工作区检查）
+    if (globalContext) {
+        try {
+            globalContext.globalState.update('controllerIndexCache', cacheData);
+            console.log('⚡ Controller 索引已保存到 globalState 缓存（快速启动）');
+        } catch (error) {
+            console.warn('globalState 缓存保存失败：', error.message);
+        }
     }
 }
 
 /**
- * 从磁盘加载缓存（磁盘缓存是工作区隔离的，不使用 globalState）
+ * 从磁盘或 globalState 加载缓存（混合方案 + 工作区隔离检查）
  */
 function loadCache() {
     let cacheData = null;
+    const currentWorkspacePath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
 
-    // 从磁盘加载（唯一的缓存来源）
-    try {
-        if (fs.existsSync(DISK_CACHE_PATH)) {
-            const diskCache = JSON.parse(fs.readFileSync(DISK_CACHE_PATH, 'utf8'));
-            if (diskCache.timestamp && Date.now() - diskCache.timestamp < CACHE_VALIDITY_TIME) {
-                cacheData = diskCache;
-                console.log(`📂 从磁盘加载 Controller 索引 (${diskCache.indexSize} 条路径, 工作区隔离)`);
-            } else {
-                console.log('⏰ 磁盘缓存已过期（超过 5 天）');
+    // 1️⃣ 优先从 globalState 加载（最快，但需要验证工作区）
+    if (globalContext) {
+        try {
+            const globalCache = globalContext.globalState.get('controllerIndexCache');
+            if (globalCache &&
+                globalCache.timestamp &&
+                Date.now() - globalCache.timestamp < CACHE_VALIDITY_TIME &&
+                globalCache.workspacePath === currentWorkspacePath) {  // ✅ 检查工作区路径匹配
+                cacheData = globalCache;
+                console.log(`⚡ 从 globalState 加载缓存 (${globalCache.indexSize} 条路径，工作区验证通过)`);
+            } else if (globalCache && globalCache.workspacePath !== currentWorkspacePath) {
+                console.log(`📁 工作区已切换，忽略旧的 globalState 缓存`);
             }
+        } catch (error) {
+            console.warn('globalState 缓存读取失败：', error.message);
         }
-    } catch (error) {
-        console.warn('磁盘缓存加载失败：', error.message);
     }
 
-    // 加载缓存数据
+    // 2️⃣ globalState 不可用，从磁盘加载（备份方案）
+    if (!cacheData) {
+        try {
+            if (fs.existsSync(DISK_CACHE_PATH)) {
+                const diskCache = JSON.parse(fs.readFileSync(DISK_CACHE_PATH, 'utf8'));
+                if (diskCache.timestamp && Date.now() - diskCache.timestamp < CACHE_VALIDITY_TIME &&
+                    diskCache.workspacePath === currentWorkspacePath) {  // ✅ 检查工作区路径匹配
+                    cacheData = diskCache;
+                    console.log(`📂 从磁盘加载缓存 (${diskCache.indexSize} 条路径，工作区验证通过)`);
+                } else if (diskCache && diskCache.workspacePath !== currentWorkspacePath) {
+                    console.log(`📁 磁盘缓存来自其他工作区，将重新构建索引`);
+                }
+            }
+        } catch (error) {
+            console.warn('磁盘缓存加载失败：', error.message);
+        }
+    }
+
+    // 3️⃣ 加载缓存数据
     if (cacheData) {
         try {
             controllerPathIndex.clear();
@@ -177,7 +212,7 @@ function clearControllerCache() {
     controllerIndexBuildTime = 0;
     isIndexBuilding = false;
 
-    // 3️⃣ 删除磁盘缓存文件（只用磁盘缓存）
+    // 3️⃣ 删除磁盘缓存文件
     try {
         if (fs.existsSync(DISK_CACHE_PATH)) {
             fs.unlinkSync(DISK_CACHE_PATH);
@@ -185,6 +220,16 @@ function clearControllerCache() {
         }
     } catch (error) {
         console.warn('磁盘缓存文件删除失败：', error.message);
+    }
+
+    // 4️⃣ 清除 globalState 中的缓存（包含工作区路径信息）
+    if (globalContext) {
+        try {
+            globalContext.globalState.update('controllerIndexCache', undefined);
+            console.log('🗑️  已清除 globalState 缓存');
+        } catch (error) {
+            console.warn('globalState 缓存清除失败：', error.message);
+        }
     }
 }
 
