@@ -88,7 +88,7 @@ const CACHE_VALIDITY_TIME = 5 * 24 * 60 * 60 * 1000;  // 5 天
 const CHANGED_FILES = new Set();      // 追踪变化的文件
 
 /**
- * 将 Controller 索引缓存保存到磁盘和 VS Code 全局状态（混合方案）
+ * 将 Controller 索引缓存保存到磁盘（磁盘缓存是工作区隔离的）
  */
 function saveCache() {
     if (!controllerIndexInitialized) return;
@@ -101,57 +101,37 @@ function saveCache() {
         suffixIndexL1: Array.from(suffixIndexL1.entries())
     };
 
-    // 1️⃣ 保存到磁盘
+    // 保存到磁盘（只用磁盘缓存，工作区隔离）
     try {
         fs.writeFileSync(DISK_CACHE_PATH, JSON.stringify(cacheData), 'utf8');
-        console.log(`💾 Controller 索引已保存到磁盘 (${cacheData.indexSize} 条路径)`);
+        console.log(`💾 Controller 索引已保存到磁盘 (${cacheData.indexSize} 条路径, 工作区隔离)`);
     } catch (error) {
         console.warn('磁盘缓存保存失败：', error.message);
-    }
-
-    // 2️⃣ 备份到 VS Code globalState
-    if (globalContext) {
-        try {
-            globalContext.globalState.update('controllerIndexCache', cacheData);
-        } catch (error) {
-            console.warn('globalState 缓存保存失败：', error.message);
-        }
     }
 }
 
 /**
- * 从磁盘或 VS Code globalState 加载缓存（优先级：磁盘 > globalState）
+ * 从磁盘加载缓存（磁盘缓存是工作区隔离的，不使用 globalState）
  */
 function loadCache() {
     let cacheData = null;
 
-    // 1️⃣ 优先从磁盘加载（最快）
+    // 从磁盘加载（唯一的缓存来源）
     try {
         if (fs.existsSync(DISK_CACHE_PATH)) {
             const diskCache = JSON.parse(fs.readFileSync(DISK_CACHE_PATH, 'utf8'));
             if (diskCache.timestamp && Date.now() - diskCache.timestamp < CACHE_VALIDITY_TIME) {
                 cacheData = diskCache;
-                console.log(`📂 从磁盘加载 Controller 索引 (${diskCache.indexSize} 条路径)`);
+                console.log(`📂 从磁盘加载 Controller 索引 (${diskCache.indexSize} 条路径, 工作区隔离)`);
+            } else {
+                console.log('⏰ 磁盘缓存已过期（超过 5 天）');
             }
         }
     } catch (error) {
         console.warn('磁盘缓存加载失败：', error.message);
     }
 
-    // 2️⃣ 磁盘缓存不可用，尝试从 globalState 恢复
-    if (!cacheData && globalContext) {
-        try {
-            const globalCache = globalContext.globalState.get('controllerIndexCache');
-            if (globalCache && globalCache.timestamp && Date.now() - globalCache.timestamp < CACHE_VALIDITY_TIME) {
-                cacheData = globalCache;
-                console.log(`🔄 从 VS Code 缓存恢复 (${globalCache.indexSize} 条路径)`);
-            }
-        } catch (error) {
-            console.warn('globalState 缓存恢复失败：', error.message);
-        }
-    }
-
-    // 3️⃣ 加载缓存数据
+    // 加载缓存数据
     if (cacheData) {
         try {
             controllerPathIndex.clear();
@@ -197,7 +177,7 @@ function clearControllerCache() {
     controllerIndexBuildTime = 0;
     isIndexBuilding = false;
 
-    // 3️⃣ 删除磁盘缓存文件
+    // 3️⃣ 删除磁盘缓存文件（只用磁盘缓存）
     try {
         if (fs.existsSync(DISK_CACHE_PATH)) {
             fs.unlinkSync(DISK_CACHE_PATH);
@@ -205,16 +185,6 @@ function clearControllerCache() {
         }
     } catch (error) {
         console.warn('磁盘缓存文件删除失败：', error.message);
-    }
-
-    // 4️⃣ 清除 VS Code globalState 中的缓存
-    if (globalContext) {
-        try {
-            globalContext.globalState.update('controllerIndexCache', undefined);
-            console.log('🗑️  已清除 VS Code globalState 缓存');
-        } catch (error) {
-            console.warn('globalState 缓存清除失败：', error.message);
-        }
     }
 }
 
