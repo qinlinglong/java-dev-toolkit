@@ -1178,6 +1178,18 @@ async function findControllersByPath(inputPath, useCache = true, matchType = 'pa
 
     // 策略3：缓存未初始化或缓存未找到，进行完整搜索
     // （仅在初次使用或文件变化时触发）
+
+    // 🚀 快速检查：如果缓存已初始化但为空，说明项目中没有任何 Controller
+    if (controllerIndexInitialized && controllerPathIndex.size === 0) {
+        console.log('✅ 缓存已初始化，但项目中无任何 Controller');
+        matches._searchInfo = {
+            fromCache: true,
+            indexSize: 0,
+            searchType: matchType
+        };
+        return matches;  // 立即返回空数组，不必再搜索
+    }
+
     console.log('缓存未命中或未初始化，执行完整搜索...');
 
     const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
