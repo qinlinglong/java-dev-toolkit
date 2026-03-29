@@ -973,6 +973,21 @@ async function parseJavaFileForControllers(filePath) {
     const document = await vscode.workspace.openTextDocument(uri);
     const text = document.getText();
 
+    // 检查类是否有 @Controller 或 @RestController 注解
+    // 支持：@Controller, @RestController, 以及它们的变体（如 @Controller @Api）
+    const controllerMatch = text.match(/@(?:Rest)?Controller\b/);
+    if (!controllerMatch) {
+        // 如果没有 @Controller 或 @RestController，则此文件不是 Controller
+        return {
+            package: '',
+            className: '',
+            classPath: '',
+            methods: [],
+            document: document,
+            isController: false
+        };
+    }
+
     // 提取包名
     const packageMatch = text.match(/^package\s+([\w.]+)\s*;/m);
     const packageName = packageMatch ? packageMatch[1] : '';
@@ -1034,7 +1049,8 @@ async function parseJavaFileForControllers(filePath) {
         className: className,
         classPath: classPath,
         methods: methods,
-        document: document
+        document: document,
+        isController: true
     };
 }
 
