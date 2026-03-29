@@ -891,7 +891,7 @@ async function buildControllerPathIndex() {
                         for (const method of parseResult.methods) {
                             const path = method.fullPath;
                             const controller = {
-                                file: fileUri,
+                                file: fileUri.fsPath,  // ✅ 存储文件路径字符串，而不是 URI 对象
                                 package: parseResult.package,
                                 className: parseResult.className,
                                 methodName: method.name,
@@ -1220,7 +1220,7 @@ async function findControllersByPath(inputPath, useCache = true, matchType = 'pa
 
                 if (isMatch) {
                     matches.push({
-                        file: fileUri,
+                        file: fileUri.fsPath,  // ✅ 存储文件路径字符串
                         package: result.package,
                         className: result.className,
                         methodName: method.name,
