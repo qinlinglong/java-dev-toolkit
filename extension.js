@@ -1242,6 +1242,22 @@ function activate(context) {
     // 🔄 初始化缓存路径（按工作区隔离）
     initCachePath();
 
+    // 🔄 监听工作区变化，自动切换缓存
+    let workspaceFolderChangeDisposable = vscode.workspace.onDidChangeWorkspaceFolders((event) => {
+        console.log('📁 检测到工作区变化，重新初始化缓存...');
+        // 清除当前工作区的缓存（内存）
+        clearControllerCache();
+        // 重新初始化缓存路径
+        initCachePath();
+        // 加载新工作区的缓存
+        const newCacheLoaded = loadCache();
+        if (newCacheLoaded) {
+            console.log('✅ 已加载新工作区的缓存');
+        } else {
+            console.log('🔍 新工作区暂无缓存，将在首次搜索时构建');
+        }
+    });
+
     // 🔄 尝试加载缓存（混合方案：磁盘 > globalState）
     const cacheLoaded = loadCache();
 
@@ -2530,7 +2546,7 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
         }, CACHE_INVALIDATE_DELAY);
     });
 
-    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, clearControllerCacheCommand, fileWatcher);
+    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, clearControllerCacheCommand, fileWatcher, workspaceFolderChangeDisposable);
 }
 
 function deactivate() {}
