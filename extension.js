@@ -46,6 +46,30 @@ let isIndexBuilding = false;           // 索引构建中标志（防止并发�
 // 全局变量：用于保存缓存的上下文和磁盘路径
 let globalContext = null;
 let DISK_CACHE_PATH = '';  // 动态设置，按工作区隔离
+let lastWorkspacePath = '';  // 记录上次工作区路径，用于检测工作区切换
+
+/**
+ * 检查工作区是否已切换，如果切换则清除缓存
+ */
+function checkAndSwitchWorkspace() {
+    const currentWorkspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const currentPath = currentWorkspaceFolder?.uri.fsPath || '';
+
+    if (currentPath && lastWorkspacePath && currentPath !== lastWorkspacePath) {
+        console.log(`📁 检测到工作区切换: ${lastWorkspacePath} → ${currentPath}`);
+        console.log('🧹 清除旧工作区缓存...');
+        clearControllerCache();
+        initCachePath();
+        const newCacheLoaded = loadCache();
+        if (newCacheLoaded) {
+            console.log('✅ 已加载新工作区的缓存');
+        } else {
+            console.log('🔍 新工作区暂无缓存');
+        }
+    }
+
+    lastWorkspacePath = currentPath;
+}
 
 function initCachePath() {
     // 根据当前工作区生成缓存文件路径，避免不同项目间缓存混淆
@@ -1258,6 +1282,11 @@ function activate(context) {
         }
     });
 
+    // 🔄 初始化当前工作区路径（用于检测工作区切换）
+    const currentWorkspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    lastWorkspacePath = currentWorkspaceFolder?.uri.fsPath || '';
+    console.log(`📁 当前工作区: ${lastWorkspacePath || '未打开工作区'}`);
+
     // 🔄 尝试加载缓存（混合方案：磁盘 > globalState）
     const cacheLoaded = loadCache();
 
@@ -2356,6 +2385,9 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
     // [功能 9] 按 REST 路径导航到 Controller
     let navigateToController = vscode.commands.registerCommand('advCopy.navigateToController', async () => {
         try {
+            // ⚠️ 检查工作区是否已切换，如果切换则刷新缓存
+            checkAndSwitchWorkspace();
+
             // 1. 从剪贴板读取默认值
             const clipboardText = await vscode.env.clipboard.readText();
 
