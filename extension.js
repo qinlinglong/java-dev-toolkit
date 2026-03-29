@@ -1,5 +1,8 @@
 const vscode = require('vscode');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 
 // ============== 性能优化：预编译常量 ==============
 
@@ -19,12 +22,12 @@ const FIELD_KINDS = new Set([7, 13, 14]);      // field, property, variable
 
 // 类型分类系统（统一类型判断逻辑）
 const TYPE_CATEGORIES = {
-    NUMERIC: ['byte', 'short', 'int', 'long', 'float', 'double', 'decimal', 'big', 'integer', 'number'],
+    NUMERIC: ['byte', 'short', 'int', 'long', 'float', 'double', 'decimal', 'big', 'integer', 'number', 'bigdecimal', 'biginteger'],
     STRING: ['string', 'char', 'character'],
     BOOLEAN: ['bool', 'boolean'],
     COLLECTION: ['list', 'set'],
     MAP: ['map'],
-    TEMPORAL: ['date', 'time', 'stamp']
+    TEMPORAL: ['date', 'time', 'stamp', 'timestamp', 'localdate', 'localdatetime', 'localtime', 'zoneddatetime', 'instant', 'offsetdatetime', 'period', 'duration', 'calendar']
 };
 
 // 性能优化：缓存对象
@@ -33,8 +36,164 @@ const fieldTypeCache = new Map();
 
 // Controller 路径索引缓存（用于加速搜索）
 const controllerPathIndex = new Map(); // 格式：path -> [{file, className, methodName, line, ...}]
+const controllerLayeredIndex = {};     // 分层索引，用于高效的前缀匹配
+const suffixIndexL1 = new Map();       // 第一层后缀索引：最后一段 → [paths...]（快速构建）
+let suffixIndexL2 = null;              // 第二层后缀索引：所有后缀 → [paths...]（懒加载）
 let controllerIndexInitialized = false;
-let controllerIndexBuildTime = 0;  // 上次构建时间
+let controllerIndexBuildTime = 0;      // 上次构建时间
+let isIndexBuilding = false;           // 索引构建中标志（防止并发构建）
+
+// 全局变量：用于保存缓存的上下文和磁盘路径
+let globalContext = null;
+let DISK_CACHE_PATH = '';  // 动态设置，按工作区隔离
+
+function initCachePath() {
+    // 根据当前工作区生成缓存文件路径，避免不同项目间缓存混淆
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+        // 使用工作区路径的哈希作为缓存文件名，确保不同工作区有不同的缓存
+        const workspaceHash = crypto.createHash('md5').update(workspaceFolder.uri.fsPath).digest('hex').slice(0, 8);
+        DISK_CACHE_PATH = path.join(os.homedir(), `.vscode-advanced-copy-cache-${workspaceHash}.json`);
+    } else {
+        // 没有打开工作区时，使用默认路径
+        DISK_CACHE_PATH = path.join(os.homedir(), '.vscode-advanced-copy-cache-default.json');
+    }
+    console.log(`📍 缓存路径: ${DISK_CACHE_PATH}`);
+}
+const CACHE_VALIDITY_TIME = 5 * 24 * 60 * 60 * 1000;  // 5 天
+const CHANGED_FILES = new Set();      // 追踪变化的文件
+
+/**
+ * 将 Controller 索引缓存保存到磁盘和 VS Code 全局状态（混合方案）
+ */
+function saveCache() {
+    if (!controllerIndexInitialized) return;
+
+    const cacheData = {
+        timestamp: Date.now(),
+        indexSize: controllerPathIndex.size,
+        pathIndex: Array.from(controllerPathIndex.entries()),
+        layeredIndex: controllerLayeredIndex,
+        suffixIndexL1: Array.from(suffixIndexL1.entries())
+    };
+
+    // 1️⃣ 保存到磁盘
+    try {
+        fs.writeFileSync(DISK_CACHE_PATH, JSON.stringify(cacheData), 'utf8');
+        console.log(`💾 Controller 索引已保存到磁盘 (${cacheData.indexSize} 条路径)`);
+    } catch (error) {
+        console.warn('磁盘缓存保存失败：', error.message);
+    }
+
+    // 2️⃣ 备份到 VS Code globalState
+    if (globalContext) {
+        try {
+            globalContext.globalState.update('controllerIndexCache', cacheData);
+        } catch (error) {
+            console.warn('globalState 缓存保存失败：', error.message);
+        }
+    }
+}
+
+/**
+ * 从磁盘或 VS Code globalState 加载缓存（优先级：磁盘 > globalState）
+ */
+function loadCache() {
+    let cacheData = null;
+
+    // 1️⃣ 优先从磁盘加载（最快）
+    try {
+        if (fs.existsSync(DISK_CACHE_PATH)) {
+            const diskCache = JSON.parse(fs.readFileSync(DISK_CACHE_PATH, 'utf8'));
+            if (diskCache.timestamp && Date.now() - diskCache.timestamp < CACHE_VALIDITY_TIME) {
+                cacheData = diskCache;
+                console.log(`📂 从磁盘加载 Controller 索引 (${diskCache.indexSize} 条路径)`);
+            }
+        }
+    } catch (error) {
+        console.warn('磁盘缓存加载失败：', error.message);
+    }
+
+    // 2️⃣ 磁盘缓存不可用，尝试从 globalState 恢复
+    if (!cacheData && globalContext) {
+        try {
+            const globalCache = globalContext.globalState.get('controllerIndexCache');
+            if (globalCache && globalCache.timestamp && Date.now() - globalCache.timestamp < CACHE_VALIDITY_TIME) {
+                cacheData = globalCache;
+                console.log(`🔄 从 VS Code 缓存恢复 (${globalCache.indexSize} 条路径)`);
+            }
+        } catch (error) {
+            console.warn('globalState 缓存恢复失败：', error.message);
+        }
+    }
+
+    // 3️⃣ 加载缓存数据
+    if (cacheData) {
+        try {
+            controllerPathIndex.clear();
+            Object.keys(controllerLayeredIndex).forEach(key => delete controllerLayeredIndex[key]);
+            suffixIndexL1.clear();
+            suffixIndexL2 = null;
+            CHANGED_FILES.clear();
+
+            cacheData.pathIndex.forEach(([pathKey, items]) => {
+                controllerPathIndex.set(pathKey, items);
+            });
+            Object.assign(controllerLayeredIndex, cacheData.layeredIndex);
+            cacheData.suffixIndexL1.forEach(([key, paths]) => {
+                suffixIndexL1.set(key, paths);
+            });
+
+            controllerIndexInitialized = true;
+            controllerIndexBuildTime = cacheData.timestamp;
+
+            return true;
+        } catch (error) {
+            console.warn('缓存恢复失败，将重新构建：', error.message);
+            return false;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * 清除 REST 搜索定位 Controller 的缓存文件和状态
+ */
+function clearControllerCache() {
+    // 1️⃣ 清空内存中的索引数据
+    controllerPathIndex.clear();
+    Object.keys(controllerLayeredIndex).forEach(key => delete controllerLayeredIndex[key]);
+    suffixIndexL1.clear();
+    suffixIndexL2 = null;
+    CHANGED_FILES.clear();
+
+    // 2️⃣ 重置缓存状态标志
+    controllerIndexInitialized = false;
+    controllerIndexBuildTime = 0;
+    isIndexBuilding = false;
+
+    // 3️⃣ 删除磁盘缓存文件
+    try {
+        if (fs.existsSync(DISK_CACHE_PATH)) {
+            fs.unlinkSync(DISK_CACHE_PATH);
+            console.log(`🗑️  删除磁盘缓存文件: ${DISK_CACHE_PATH}`);
+        }
+    } catch (error) {
+        console.warn('磁盘缓存文件删除失败：', error.message);
+    }
+
+    // 4️⃣ 清除 VS Code globalState 中的缓存
+    if (globalContext) {
+        try {
+            globalContext.globalState.update('controllerIndexCache', undefined);
+            console.log('🗑️  已清除 VS Code globalState 缓存');
+        } catch (error) {
+            console.warn('globalState 缓存清除失败：', error.message);
+        }
+    }
+}
+
 
 // ============== Arthas 命令库 ==============
 /**
@@ -477,15 +636,16 @@ async function showArthasQuickPick() {
 // ============== Controller 导航工具函数 ==============
 
 /**
- * 从用户输入解析出 REST 路径（支持完整 URL）
+ * 从用户输入解析出 REST 路径（支持完整 URL 和 URL 片段）
  * 输入示例：
  *   - /api/user/list                           → /api/user/list
  *   - /api/users/{id}                          → /api/users/{id}
+ *   - user/list                                → user/list (后缀匹配)
  *   - http://api.example.com/api/user/list     → /api/user/list
  *   - https://api.example.com:8080/api/user    → /api/user
  *   - http://localhost:3000/api/user?page=1   → /api/user
  * @param {string} input - 用户输入
- * @returns {{path: string, isValid: boolean, error?: string}}
+ * @returns {{path: string, isValid: boolean, error?: string, matchType: string}}
  */
 function parseRestPathFromInput(input) {
     if (!input || !input.trim()) {
@@ -494,6 +654,7 @@ function parseRestPathFromInput(input) {
 
     let restPath = input.trim();
     let isFullUrl = false;
+    let matchType = 'exact'; // 默认为精确匹配
 
     // 判断是否为完整 URL（以 http:// 或 https:// 开头）
     if (restPath.startsWith('http://') || restPath.startsWith('https://')) {
@@ -520,13 +681,15 @@ function parseRestPathFromInput(input) {
             };
         }
     } else {
-        // 非 URL 形式，直接验证是否为有效 REST 路径
+        // 非 URL 形式，可能是路径片段 (例如: user/list)
+        // 判断是否为路径片段（不以 / 开头）
         if (!restPath.startsWith('/')) {
-            return {
-                isValid: false,
-                error: 'REST 路径必须以 / 开头',
-                path: ''
-            };
+            // 这是一个路径片段，后缀匹配
+            matchType = 'suffix';
+            // 片段不需要 / 前缀，保持原样
+        } else {
+            // 完整路径，精确或前缀匹配
+            matchType = 'path';
         }
 
         // 去掉 query 和 hash 部分（如果有）
@@ -536,8 +699,115 @@ function parseRestPathFromInput(input) {
     return {
         isValid: true,
         path: restPath,
+        matchType: matchType,  // exact/prefix/suffix
         fromUrl: isFullUrl
     };
+}
+
+/**
+ * 构建分层路径索引，用于高效的前缀匹配
+ * 将平面路径索引转换为树形结构
+ *
+ * 示例：
+ *   输入: Map { "/api/user/list" → [...], "/api/user/delete" → [...] }
+ *   输出: { api: { user: { list: [...], delete: [...] } } }
+ *
+ * @param {Map} flatIndex - 平面 Map 索引
+ * @returns {Object} 分层索引对象
+ */
+/**
+ * 收集分层索引中某个节点下的所有 controllers（包括子节点）
+ * @param {Object} node - 分层索引中的一个节点
+ * @returns {Array} 该节点及所有子节点下的 controllers 扁平化数组
+ */
+function collectAllControllersFromLayered(node) {
+    const result = [];
+
+    function traverse(current) {
+        if (!current) return;
+
+        // 添加当前节点的 controllers
+        if (current.__controllers && current.__controllers.length > 0) {
+            result.push(...current.__controllers);
+        }
+
+        // 递归遍历子节点
+        if (current.__children) {
+            for (const child of Object.values(current.__children)) {
+                traverse(child);
+            }
+        }
+    }
+
+    traverse(node);
+    return result;
+}
+
+/**
+ * 按需构建第二层后缀索引（所有可能的后缀）
+ * 只在必要时调用一次，之后缓存结果
+ */
+function buildSuffixIndexL2() {
+    if (suffixIndexL2) return;  // 已构建，直接返回
+
+    suffixIndexL2 = new Map();
+
+    for (const [path] of controllerPathIndex) {
+        const segments = path.split('/').filter(Boolean);
+
+        // 为所有可能的后缀创建映射（O(n*k)，但只做一次）
+        for (let i = segments.length; i > 0; i--) {
+            const suffix = segments.slice(i - 1).join('/');
+            if (!suffixIndexL2.has(suffix)) {
+                suffixIndexL2.set(suffix, []);
+            }
+            suffixIndexL2.get(suffix).push(path);
+        }
+    }
+
+    console.log(`✅ 第二层后缀索引已构建，包含 ${suffixIndexL2.size} 个索引项`);
+}
+
+/**
+ * 从分层索引中查找前缀匹配的所有 controllers（高效！O(k) k=路径段数）
+ * @param {string} inputPath - 输入路径 (如 "/api/user")
+ * @param {Object} layeredIndex - 分层索引
+ * @returns {Array} 匹配的 controllers 列表
+ */
+function findByLayeredPrefix(inputPath, layeredIndex) {
+    const segments = inputPath.split('/').filter(Boolean);
+    let current = layeredIndex;
+
+    // O(k) 查询，k = 输入路径段数，导航到目标节点
+    for (const segment of segments) {
+        if (!current[segment]) {
+            return []; // 未找到匹配的前缀
+        }
+        current = current[segment]; // 移动到当前段的节点
+    }
+
+    // 现在 current 指向目标节点（如 layeredIndex['api']['user']）
+    // 该节点有 __controllers 和 __children 属性
+    const result = [];
+
+    function collectControllers(node) {
+        if (!node) return;
+
+        // 添加当前节点的 controllers
+        if (node.__controllers && node.__controllers.length > 0) {
+            result.push(...node.__controllers);
+        }
+
+        // 递归遍历子节点
+        if (node.__children) {
+            for (const childNode of Object.values(node.__children)) {
+                collectControllers(childNode);
+            }
+        }
+    }
+
+    collectControllers(current);
+    return result;
 }
 
 /**
@@ -546,69 +816,127 @@ function parseRestPathFromInput(input) {
  * @returns {Promise<{count: number, time: number}>}
  */
 async function buildControllerPathIndex() {
-    const startTime = Date.now();
-    controllerPathIndex.clear();
+    // 防止并发构建：如果正在构建，直接返回
+    if (isIndexBuilding) {
+        console.log('索引正在构建中，跳过重复构建请求...');
+        return { count: controllerPathIndex.size, time: 0 };
+    }
 
-    // 显示构建进度
-    const result = await vscode.window.withProgress(
-        {
-            location: vscode.ProgressLocation.Notification,
-            title: '📑 构建 Controller 索引...',
-            cancellable: false
-        },
-        async (progress) => {
-            // 查找所有 Java 文件
-            const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
+    isIndexBuilding = true;
+    try {
+        const startTime = Date.now();
+        controllerPathIndex.clear();
+        // 同时清空分层索引和后缀索引
+        Object.keys(controllerLayeredIndex).forEach(key => delete controllerLayeredIndex[key]);
+        suffixIndexL1.clear();
+        suffixIndexL2 = null;  // 第二层重置为 null，下次需要时再构建
 
-            let processedCount = 0;
+        // 显示构建进度
+        const result = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: '📑 构建 Controller 索引...',
+                cancellable: false
+            },
+            async (progress) => {
+                // 查找所有 Java 文件
+                const javaFiles = await vscode.workspace.findFiles('**/*.java', '**/node_modules/**');
 
-            for (const fileUri of javaFiles) {
-                try {
-                    const parseResult = await parseJavaFileForControllers(fileUri.fsPath);
+                let processedCount = 0;
 
-                    // 为每个方法构建路径索引
-                    for (const method of parseResult.methods) {
-                        const path = method.fullPath;
+                for (const fileUri of javaFiles) {
+                    try {
+                        const parseResult = await parseJavaFileForControllers(fileUri.fsPath);
 
-                        if (!controllerPathIndex.has(path)) {
-                            controllerPathIndex.set(path, []);
+                        // 为每个方法构建所有索引（单次遍历，高效！）
+                        for (const method of parseResult.methods) {
+                            const path = method.fullPath;
+                            const controller = {
+                                file: fileUri,
+                                package: parseResult.package,
+                                className: parseResult.className,
+                                methodName: method.name,
+                                line: method.line,
+                                fullPath: path  // 添加 fullPath 以便后续使用
+                            };
+
+                            // 1️⃣ 添加到路径索引
+                            if (!controllerPathIndex.has(path)) {
+                                controllerPathIndex.set(path, []);
+                            }
+                            controllerPathIndex.get(path).push(controller);
+
+                            // 2️⃣ 同时构建分层索引（一步到位）
+                            const segments = path.split('/').filter(Boolean);
+                            let layeredNode = controllerLayeredIndex;
+
+                            for (let i = 0; i < segments.length; i++) {
+                                const segment = segments[i];
+
+                                // 初始化节点
+                                if (!layeredNode[segment]) {
+                                    layeredNode[segment] = {
+                                        __controllers: [],
+                                        __children: {}
+                                    };
+                                }
+
+                                // 在叶子节点添加 controller
+                                if (i === segments.length - 1) {
+                                    layeredNode[segment].__controllers.push(controller);
+                                }
+
+                                // 移到下一层
+                                layeredNode = layeredNode[segment].__children;
+                            }
+
+                            // 3️⃣ 构建第一层后缀索引（只索引最后一段 - 快速构建 O(n)）
+                            // 第二层（所有后缀）按需构建，使用时再触发
+                            if (segments.length > 0) {
+                                const lastSegment = segments[segments.length - 1];
+                                if (!suffixIndexL1.has(lastSegment)) {
+                                    suffixIndexL1.set(lastSegment, []);
+                                }
+                                suffixIndexL1.get(lastSegment).push(path);
+                            }
                         }
 
-                        controllerPathIndex.get(path).push({
-                            file: fileUri,
-                            package: parseResult.package,
-                            className: parseResult.className,
-                            methodName: method.name,
-                            line: method.line
-                        });
+                        processedCount++;
+                        // 每处理 10 个文件更新一次进度
+                        if (processedCount % 10 === 0) {
+                            progress.report({
+                                increment: 1,
+                                message: `已扫描 ${processedCount}/${javaFiles.length} 个文件，同时构建所有索引...`
+                            });
+                        }
+                    } catch (error) {
+                        console.warn(`Could not parse ${fileUri.fsPath}: ${error.message}`);
                     }
-
-                    processedCount++;
-                    // 每处理 10 个文件更新一次进度
-                    if (processedCount % 10 === 0) {
-                        progress.report({
-                            increment: 1,
-                            message: `已扫描 ${processedCount}/${javaFiles.length} 个文件...`
-                        });
-                    }
-                } catch (error) {
-                    console.warn(`Could not parse ${fileUri.fsPath}: ${error.message}`);
                 }
-            }
 
-            progress.report({ increment: 100 });
-            return { count: controllerPathIndex.size, filesCount: javaFiles.length };
-        }
+                progress.report({ increment: 100 });
+                return { count: controllerPathIndex.size, filesCount: javaFiles.length };
+            }
     );
+
+    // ✅ 索引已在上面的单次遍历中全部构建完成！
+    // 无需再次遍历构建分层索引或后缀索引
 
     const buildTime = Date.now() - startTime;
     controllerIndexInitialized = true;
     controllerIndexBuildTime = Date.now();
+    isIndexBuilding = false;  // 构建完成，清除标志
+
+    // 💾 将索引保存到磁盘和 VS Code 全局缓存（混合方案）
+    saveCache();
 
     return {
         count: result.count,
         time: buildTime
     };
+    } finally {
+        isIndexBuilding = false;  // 确保异常情况下也清除标志
+    }
 }
 
 /**
@@ -648,11 +976,13 @@ async function parseJavaFileForControllers(filePath) {
 
             // 向下查找方法名（最多查找5行）
             let methodName = '';
+            let methodLine = -1;  // 记录方法所在的行号
             for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
-                const methodLine = lines[j];
-                const methodMatch = methodLine.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:synchronized)?\s*[\w<>.*]+\s+(\w+)\s*\(/);
+                const methodLineText = lines[j];
+                const methodMatch = methodLineText.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:synchronized)?\s*[\w<>.*]+\s+(\w+)\s*\(/);
                 if (methodMatch) {
                     methodName = methodMatch[1];
+                    methodLine = j;  // 记录方法所在行
                     break;
                 }
             }
@@ -668,8 +998,8 @@ async function parseJavaFileForControllers(filePath) {
                     name: methodName,
                     path: methodPath,
                     fullPath: fullPath,
-                    line: i,
-                    range: new vscode.Range(i, 0, i, line.length)
+                    line: methodLine,  // 使用方法所在行而非注解行
+                    range: new vscode.Range(methodLine, 0, methodLine, lines[methodLine].length)
                 });
             }
         }
@@ -688,9 +1018,10 @@ async function parseJavaFileForControllers(filePath) {
  * 从工作区中查找匹配指定 REST 路径的 Controller（优先使用缓存）
  * @param {string} inputPath - 用户输入的 REST 路径
  * @param {boolean} useCache - 是否使用缓存（默认使用）
+ * @param {string} matchType - 匹配类型：'exact' | 'prefix' | 'suffix' | 'path'
  * @returns {Promise<Array>} 匹配的 Controller 列表
  */
-async function findControllersByPath(inputPath, useCache = true) {
+async function findControllersByPath(inputPath, useCache = true, matchType = 'path') {
     const matches = [];
 
     // 策略1：精确匹配（快速）
@@ -713,39 +1044,78 @@ async function findControllersByPath(inputPath, useCache = true) {
         return result;
     }
 
-    // 策略2：前缀匹配（使用缓存索引）
+    // 策略2：前缀/路径/后缀匹配（使用缓存索引 - 现在使用分层索引加速！）
     if (useCache && controllerIndexInitialized) {
-        for (const [path, items] of controllerPathIndex) {
-            // 检查是否为前缀匹配：路径必须相等或者输入是路径的前缀且后面跟 /
-            const isPrefix = path === inputPath ||
-                             (path.startsWith(inputPath) && path[inputPath.length] === '/');
-
-            if (isPrefix) {
-                matches.push(...items.map(item => ({
+        // 对于非后缀匹配，首先使用前缀/路径匹配
+        if (matchType !== 'suffix') {
+            const layeredMatches = findByLayeredPrefix(inputPath, controllerLayeredIndex);
+            for (const item of layeredMatches) {
+                matches.push({
                     file: item.file,
                     package: item.package,
                     className: item.className,
                     methodName: item.methodName,
-                    fullPath: path,
+                    fullPath: item.fullPath || inputPath,
                     line: item.line,
-                    matchType: path === inputPath ? 'exact' : 'prefix'
-                })));
+                    matchType: item.fullPath === inputPath ? 'exact' : 'prefix'
+                });
+            }
+
+            // 如果前缀匹配未找到结果，且输入以 / 开头，尝试路径后缀匹配
+            // 例如：输入 /readHistory/create，不仅匹配 /readHistory/create，
+            // 还匹配 /member/readHistory/create 等以这个路径结尾的完整路径
+            if (matches.length === 0 && inputPath.startsWith('/')) {
+                for (const [fullPath, items] of controllerPathIndex) {
+                    if (fullPath !== inputPath &&
+                        (fullPath.endsWith(inputPath) ||
+                         fullPath.endsWith('/' + inputPath.slice(1)))) {
+                        matches.push(...items.map(item => ({
+                            file: item.file,
+                            package: item.package,
+                            className: item.className,
+                            methodName: item.methodName,
+                            fullPath: fullPath,
+                            line: item.line,
+                            matchType: 'suffix'
+                        })));
+                    }
+                }
+            }
+        } else {
+            // 后缀匹配：支持路径后缀（如 readHistory/create 匹配 /member/readHistory/create）
+            for (const [fullPath, items] of controllerPathIndex) {
+                // 检查是否以输入路径结尾
+                if (fullPath === inputPath ||
+                    fullPath.endsWith(inputPath) ||
+                    fullPath.endsWith('/' + inputPath)) {
+                    matches.push(...items.map(item => ({
+                        file: item.file,
+                        package: item.package,
+                        className: item.className,
+                        methodName: item.methodName,
+                        fullPath: fullPath,
+                        line: item.line,
+                        matchType: fullPath === inputPath ? 'exact' : 'suffix'
+                    })));
+                }
             }
         }
 
         // 如果找到匹配项，直接返回
         if (matches.length > 0) {
             const sorted = matches.sort((a, b) => {
-                // 优先级排序：精确 > 前缀
-                if (a.fullPath === inputPath) return -1;
-                if (b.fullPath === inputPath) return 1;
+                // 优先级排序：精确 > 前缀 > 后缀
+                if (a.matchType === 'exact' && b.matchType !== 'exact') return -1;
+                if (a.matchType !== 'exact' && b.matchType === 'exact') return 1;
+                if (a.matchType === 'prefix' && b.matchType === 'suffix') return -1;
+                if (a.matchType === 'suffix' && b.matchType === 'prefix') return 1;
                 return 0;
             });
             // 添加搜索元数据
             sorted._searchInfo = {
                 fromCache: true,
                 indexSize: controllerPathIndex.size,
-                searchType: 'prefix'
+                searchType: matchType
             };
             return sorted;
         }
@@ -764,15 +1134,33 @@ async function findControllersByPath(inputPath, useCache = true) {
 
             for (const method of result.methods) {
                 let isMatch = false;
-                let matchType = '';
+                let resultMatchType = '';
 
                 if (method.fullPath === inputPath) {
                     isMatch = true;
-                    matchType = 'exact';
-                } else if (method.fullPath.startsWith(inputPath) && method.fullPath[inputPath.length] === '/') {
-                    // 前缀匹配：输入是路径的前缀且后面跟 /
-                    isMatch = true;
-                    matchType = 'prefix';
+                    resultMatchType = 'exact';
+                } else if (matchType === 'suffix') {
+                    // 后缀匹配：检查路径是否以输入段结尾
+                    // 支持 user/list 匹配 /api/user/list 等情况
+                    if (method.fullPath.endsWith(inputPath) ||
+                        method.fullPath.endsWith('/' + inputPath) ||
+                        method.fullPath === '/' + inputPath ||
+                        method.fullPath.includes('/' + inputPath + '/')) {
+                        isMatch = true;
+                        resultMatchType = 'suffix';
+                    }
+                } else if (matchType === 'path' || matchType === 'exact') {
+                    // 精确或前缀匹配
+                    if (method.fullPath.startsWith(inputPath)) {
+                        if (method.fullPath === inputPath) {
+                            isMatch = true;
+                            resultMatchType = 'exact';
+                        } else if (method.fullPath[inputPath.length] === '/') {
+                            // 前缀匹配：输入是路径的前缀且后面跟 /
+                            isMatch = true;
+                            resultMatchType = 'prefix';
+                        }
+                    }
                 }
 
                 if (isMatch) {
@@ -783,7 +1171,7 @@ async function findControllersByPath(inputPath, useCache = true) {
                         methodName: method.name,
                         fullPath: method.fullPath,
                         line: method.line,
-                        matchType: matchType
+                        matchType: resultMatchType
                     });
                 }
             }
@@ -819,17 +1207,26 @@ async function findControllersByPath(inputPath, useCache = true) {
  */
 async function openControllerAtLine(match) {
     try {
-        const editor = await vscode.window.showTextDocument(match.file, {
-            selection: new vscode.Range(match.line, 0, match.line, 0)
-        });
+        // 验证 match.file 是否有效
+        if (!match.file) {
+            throw new Error('文件路径无效');
+        }
 
-        // 将行置于编辑器中心
-        editor.revealRange(
-            new vscode.Range(match.line, 0, match.line, 0),
-            vscode.TextEditorRevealType.InCenter
-        );
+        // 如果是字符串，转换为 URI
+        const fileUri = typeof match.file === 'string'
+            ? vscode.Uri.file(match.file)
+            : match.file;
+
+        // 打开文件
+        const editor = await vscode.window.showTextDocument(fileUri);
+
+        // 设置光标位置并置于编辑器中心
+        const range = new vscode.Range(match.line, 0, match.line, 0);
+        editor.selection = new vscode.Selection(range.start, range.end);
+        editor.revealRange(range, vscode.TextEditorRevealType.InCenter);
     } catch (error) {
         vscode.window.showErrorMessage(`❌ 无法打开文件: ${error.message}`);
+        console.error('openControllerAtLine error:', error);
     }
 }
 
@@ -839,6 +1236,20 @@ async function openControllerAtLine(match) {
  * @param {vscode.ExtensionContext} context
  */
 function activate(context) {
+    // 💾 保存全局 context，用于缓存操作
+    globalContext = context;
+
+    // 🔄 初始化缓存路径（按工作区隔离）
+    initCachePath();
+
+    // 🔄 尝试加载缓存（混合方案：磁盘 > globalState）
+    const cacheLoaded = loadCache();
+
+    if (cacheLoaded) {
+        console.log('✅ 使用缓存的 Controller 索引');
+    } else {
+        console.log('🔍 缓存未有效，将在首次搜索时构建索引');
+    }
 
 function getFieldType(symbol, document) {
     // 缓存检查
@@ -891,16 +1302,6 @@ function getFieldType(symbol, document) {
     } catch (e) {
         return "String";
     }
-}
-
-function isBaseType(type) {
-    if (!type) return false;
-    const t = type.toLowerCase().replace(/[<>]/g, '').trim();
-
-    return isTypeCategory(t, 'NUMERIC') ||
-           isTypeCategory(t, 'STRING') ||
-           isTypeCategory(t, 'BOOLEAN') ||
-           isTypeCategory(t, 'TEMPORAL');
 }
 
     // --- 核心工具：获取 Java 符号及 REST 路径 ---
@@ -1961,6 +2362,7 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
             }
 
             const inputPath = parseResult.path;
+            const matchType = parseResult.matchType || 'path';
 
             // 4. 工作区检查
             const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -1969,18 +2371,45 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                 return;
             }
 
-            // 5. 首次使用或缓存过期时，构建索引
-            if (!controllerIndexInitialized) {
+            // 5. 判断缓存是否有效（基于初始化状态和时间）
+            const isCacheValid = controllerIndexInitialized &&
+                               (Date.now() - controllerIndexBuildTime < CACHE_VALIDITY_TIME);
+
+            if (!isCacheValid) {
                 const buildResult = await buildControllerPathIndex();
                 vscode.window.showInformationMessage(
                     `✅ 索引已构建：${buildResult.count} 条路径（耗时 ${buildResult.time}ms）`
                 );
             } else {
-                vscode.window.showInformationMessage('🔍 使用缓存搜索中...');
+                // 缓存已初始化，无需重建（除非文件监听器标记为过期）
+                console.log(`✅ 使用缓存：${controllerPathIndex.size} 条路径`);
             }
 
-            // 6. 搜索匹配的 Controller（使用缓存）
-            const matches = await findControllersByPath(inputPath, true);
+            // 6. 搜索匹配的 Controller（使用缓存或全量搜索）
+            let matches;
+            let cancelled = false;
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: '🔍 搜索中...',
+                    cancellable: true
+                },
+                async (progress, token) => {
+                    // 监听取消事件
+                    token.onCancellationRequested(() => {
+                        cancelled = true;
+                        console.log('用户取消了搜索');
+                    });
+
+                    matches = await findControllersByPath(inputPath, true, matchType);
+                }
+            );
+
+            // 如果用户取消了搜索，直接返回
+            if (cancelled) {
+                vscode.window.showInformationMessage('🚫 搜索已取消');
+                return;
+            }
 
             if (matches.length === 0) {
                 // 构建详细的错误消息
@@ -2044,34 +2473,64 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
         }
     });
 
+    // 清除 Controller 导航缓存命令
+    let clearControllerCacheCommand = vscode.commands.registerCommand('advCopy.clearControllerCache', async () => {
+        try {
+            clearControllerCache();
+            vscode.window.showInformationMessage('✅ 已成功清除 Controller 导航缓存');
+            console.log('🗑️  Controller 导航缓存已清除');
+        } catch (error) {
+            vscode.window.showErrorMessage(`❌ 缓存清除失败: ${error.message}`);
+            console.error('clearControllerCache error:', error);
+        }
+    });
+
     // 添加文件监听器（工作区文件变化检测）
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 
-    fileWatcher.onDidCreate(() => {
-        // 新增 Java 文件，标记缓存需要更新
-        if (controllerIndexInitialized) {
-            console.log('检测到新增 Java 文件，将在下次搜索时更新缓存...');
-            controllerIndexInitialized = false;  // 标记缓存为陈旧
-        }
+    fileWatcher.onDidCreate((event) => {
+        // 新增 Java 文件，仅标记缓存为脏，不立即清空
+        if (isIndexBuilding) return;
+
+        clearTimeout(cacheInvalidateTimer);
+        cacheInvalidateTimer = setTimeout(() => {
+            if (!isIndexBuilding) {
+                console.log('📝 检测到新增文件，缓存标记为脏（下次搜索时增量更新）');
+                CHANGED_FILES.add(event.fsPath);
+                controllerIndexInitialized = false;  // 标记缓存需要刷新
+            }
+        }, CACHE_INVALIDATE_DELAY);
     });
 
-    fileWatcher.onDidChange(() => {
-        // 文件被修改，标记缓存需要更新
-        if (controllerIndexInitialized) {
-            console.log('检测到 Java 文件修改，将在下次搜索时更新缓存...');
-            controllerIndexInitialized = false;
-        }
+    fileWatcher.onDidChange((event) => {
+        // 文件被修改，仅标记缓存为脏
+        if (isIndexBuilding) return;
+
+        clearTimeout(cacheInvalidateTimer);
+        cacheInvalidateTimer = setTimeout(() => {
+            if (!isIndexBuilding) {
+                console.log('📝 检测到文件修改，缓存标记为脏（下次搜索时增量更新）');
+                CHANGED_FILES.add(event.fsPath);
+                controllerIndexInitialized = false;
+            }
+        }, CACHE_INVALIDATE_DELAY);
     });
 
-    fileWatcher.onDidDelete(() => {
-        // 文件被删除，标记缓存需要更新
-        if (controllerIndexInitialized) {
-            console.log('检测到 Java 文件删除，将在下次搜索时更新缓存...');
-            controllerIndexInitialized = false;
-        }
+    fileWatcher.onDidDelete((event) => {
+        // 文件被删除，仅标记缓存为脏
+        if (isIndexBuilding) return;
+
+        clearTimeout(cacheInvalidateTimer);
+        cacheInvalidateTimer = setTimeout(() => {
+            if (!isIndexBuilding) {
+                console.log('📝 检测到文件删除，缓存标记为脏（下次搜索时增量更新）');
+                CHANGED_FILES.add(event.fsPath);
+                controllerIndexInitialized = false;
+            }
+        }, CACHE_INVALIDATE_DELAY);
     });
 
-    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, fileWatcher);
+    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, clearControllerCacheCommand, fileWatcher);
 }
 
 function deactivate() {}
