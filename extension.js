@@ -988,11 +988,14 @@ async function parseJavaFileForControllers(filePath) {
     const document = await vscode.workspace.openTextDocument(uri);
     const text = document.getText();
 
-    // 检查类是否有 @Controller 或 @RestController 注解
-    // 支持：@Controller, @RestController, 以及它们的变体（如 @Controller @Api）
-    const controllerMatch = text.match(/@(?:Rest)?Controller\b/);
-    if (!controllerMatch) {
-        // 如果没有 @Controller 或 @RestController，则此文件不是 Controller
+    // 1️⃣ 检查是否为 Spring REST Controller
+    const isSpringController = text.match(/@(?:Rest)?Controller\b/);
+
+    // 2️⃣ 检查是否为 JAX-RS REST Service（带 @Path 或 @Api）
+    const isJaxRsService = text.match(/@(?:Path|Api)\b/);
+
+    if (!isSpringController && !isJaxRsService) {
+        // 既不是 Spring 也不是 JAX-RS
         return {
             package: '',
             className: '',
@@ -1007,32 +1010,68 @@ async function parseJavaFileForControllers(filePath) {
     const packageMatch = text.match(/^package\s+([\w.]+)\s*;/m);
     const packageName = packageMatch ? packageMatch[1] : '';
 
-    // 提取类名
+    // 提取类名（支持 class 和 interface）
     const classMatch = text.match(/(?:public\s+)?(?:class|interface)\s+(\w+)/);
     const className = classMatch ? classMatch[1] : '';
 
-    // 提取类级 @RequestMapping 路径
-    const classPathMatch = text.match(/@RequestMapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
-    const classPath = classPathMatch ? classPathMatch[1] : '';
+    // 提取类级路径（Spring: @RequestMapping 或 JAX-RS: @Path）
+    let classPath = '';
+    const springClassPathMatch = text.match(/@RequestMapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+    if (springClassPathMatch) {
+        classPath = springClassPathMatch[1];
+    } else {
+        // JAX-RS 风格：@Path("...")
+        const jaxRsClassPathMatch = text.match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
+        if (jaxRsClassPathMatch) {
+            classPath = jaxRsClassPathMatch[1];
+        }
+    }
 
     const methods = [];
 
-    // 按行遍历，查找所有方法的 @RequestMapping 等注解
+    // 按行遍历，查找所有方法的映射注解
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
 
-        // 匹配方法级的 Mapping 注解
-        const methodMapMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+        let methodPath = '';
+        let foundMapping = false;
 
-        if (methodMapMatch) {
-            const methodPath = methodMapMatch[1];
+        // Spring 风格：@RequestMapping, @PostMapping, @GetMapping 等
+        const springMapMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+        if (springMapMatch) {
+            methodPath = springMapMatch[1];
+            foundMapping = true;
+        }
 
+        // JAX-RS 风格：@Path("...") + @POST/@GET/@PUT/@DELETE/@PATCH
+        if (!foundMapping) {
+            const jaxRsPathMatch = line.match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
+            const httpMethodMatch = line.match(/@(?:POST|GET|PUT|DELETE|PATCH|HEAD|OPTIONS)\b/);
+
+            if (jaxRsPathMatch && httpMethodMatch) {
+                methodPath = jaxRsPathMatch[1];
+                foundMapping = true;
+            } else if (httpMethodMatch) {
+                // HTTP 方法注解存在，检查附近的 @Path
+                for (let k = Math.max(0, i - 5); k < Math.min(lines.length, i + 1); k++) {
+                    const pathMatch = lines[k].match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
+                    if (pathMatch) {
+                        methodPath = pathMatch[1];
+                        foundMapping = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (foundMapping && methodPath) {
             // 向下查找方法名（最多查找5行）
             let methodName = '';
             let methodLine = -1;  // 记录方法所在的行号
             for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
                 const methodLineText = lines[j];
+                // 支持 interface 方法（无方法体）和 class 方法
                 const methodMatch = methodLineText.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:synchronized)?\s*[\w<>.*]+\s+(\w+)\s*\(/);
                 if (methodMatch) {
                     methodName = methodMatch[1];
