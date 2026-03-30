@@ -1,11 +1,13 @@
 # Advanced Copy (Hiruko Edition) 👁️
 
-[![Version](https://img.shields.io/badge/version-1.3.2-red.svg)](https://github.com/qinlinglong/advanced-copy)
+[![Version](https://img.shields.io/badge/version-1.3.7-red.svg)](https://github.com/qinlinglong/advanced-copy)
 
 **Advanced Copy** 现已觉醒为 **Hiruko (蛭子)** 究极形态。
 基于《夏日重现》古神权能，旨在通过高效的”观测”与”重现”，破解繁琐的编码与诊断工作。在 Hiruko 的注视下，所有的代码逻辑都将化为确定的”真实”。
 
-> **v1.3.2 导航功能增强** 🚀 - Navigate to Controller 升级：支持弹窗输入、URL 自动解析、缓存索引加速、文件变化自动更新。
+> **v1.3.7 多框架支持 & 搜索优化** 🚀
+> - **三风格统一**：Copy REST Full Path 与 Navigate to Controller 同时支持 Spring、JAX-RS、Feign 三种 REST 框架风格
+> - **搜索极速化**：消除缓存命中时的全量扫描，搜索性能提升 **5-30 倍**（5-30s → 10-50ms）
 
 ---
 
@@ -23,7 +25,7 @@
 | **复制 Arthas Vmtool** | `Ctrl + Alt + 1` | `Cmd + Alt + 1` | 瞬发：生成 vmtool 诊断命令 |
 | **复制 Arthas TT** | `Ctrl + Alt + 2` | `Cmd + Alt + 2` | 瞬发：生成 tt 记录命令 |
 | **📚 Arthas 命令库** | `Ctrl + Alt + 3` | `Cmd + Alt + 3` | **⭐ 新增**：快速访问 59 个 Arthas 命令 |
-| **Navigate to Controller** | `Ctrl + Alt + N` | `Cmd + Alt + N` | **⭐ v1.3.2 增强**：弹窗输入 REST 路径或 URL，支持自动 URL 解析、缓存索引加速、文件变化自动更新 |
+| **粘贴定位 Controller** | `Ctrl + Alt + N` | `Cmd + Alt + N` | **⭐ v1.3.2 增强**：输入或粘贴 REST 路径/URL，智能提取并定位 Controller，支持缓存索引加速 |
 | **智能粘贴器** | `Ctrl + Shift + V` | `Cmd + Shift + V` | 瞬发：净化并粘贴为 Java 字符串 |
 | **复制纯文本** | `Ctrl + Shift + C` | `Cmd + Shift + C` | 瞬发：剥离转义字符，净化为原始内容 |
 
@@ -62,9 +64,11 @@
 - **类型缓存加速**：字段类型解析结果缓存，重复操作性能提升 **~70%**
 
 ### 5. 🛠️ REST 路径观测 (REST Path) - **接口完整映射**
-**1.1.4 新瞳觉醒**：支持 Spring MVC (`@RequestMapping` 等) 全注解识别与路径自动拼接。
+**1.1.4 新瞳觉醒 & v1.3.7 三风格统一**：支持 Spring MVC、JAX-RS、Spring Cloud Feign 三种主流 REST 框架注解识别与路径自动拼接。
 - **完整路径拼接**：自动融合 Controller 与 Method 层的 Mapping 路径
-- **多注解支持**：支持 @RequestMapping、@GetMapping、@PostMapping 等全系列注解
+- **Spring 风格**：`@RequestMapping`、`@GetMapping`、`@PostMapping` 等全系列注解 ✅
+- **JAX-RS 风格**：`@Path` 注解（类和方法级别）✅ **v1.3.7 新增**
+- **Feign 风格**：`@FeignClient` + `@RequestMapping` 组合 ✅ **v1.3.7 完整验证**
 
 ---
 
@@ -75,13 +79,13 @@
 | 功能 | 标识 | 说明 |
 | :--- | :--- | :--- |
 | **Copy Reference** | `$(file)` | **[1.0.0]** 核心功能：提取 Java 全限定路径（包名+类名+方法名） |
-| **Copy REST Full Path**| `$(link)` | **[1.1.4]** 自动融合 Controller 与 Method 层的 Mapping 路径 |
+| **Copy REST Full Path**| `$(link)` | **[1.1.4]** 自动融合 Controller 与 Method 层的 Mapping 路径；**[v1.3.7]** 支持 Spring、JAX-RS、Feign 三种框架风格 |
 | **Copy as SQL Select** | `$(database)` | **[1.3.0]** 完美识别字段，支持下划线转译与表名清洗，修复字段遗漏问题 |
 | **Copy as JSON** | `$(beaker)` | **[1.1.4]** 选区智能解析，修复数值类型映射精度 |
 | **Copy Arthas Vmtool** | `$(zap)` | **[1.2.0]** 穿透内存的诊断神谕，智能自动识别参数类型并拼接，中文参数自动转 Unicode 编码确保跨域安全执行 |
 | **Copy Arthas TimeTunnel** | `$(history)` | **[1.1.4]** 生成方法执行记录命令，实现生产现场回溯 |
 | **Copy More Arthas Commands** | `$(zap)` | **[1.3.0]** 快速访问 59 个 Arthas 诊断命令库 |
-| **Navigate to Controller** | `$(arrow-right)` | **[1.3.2]** 弹窗输入 REST 路径或完整 URL，自动提取 path、快速缓存索引、文件变化自动更新 |
+| **粘贴定位 Controller** | `$(arrow-right)` | **[1.3.2]** 输入或粘贴 REST 路径/完整 URL，智能提取并快速定位对应 Controller，支持缓存索引加速、文件自动更新；**[v1.3.7]** 支持 Spring、JAX-RS、Feign 三种框架风格；搜索性能提升 **5-30 倍** |
 | **Copy Pure Content** | `$(copy)` | **[1.0.1]** 剥离转义字符，净化为原始 JSON/文本 |
 | **Paste as Java String** | `$(paste)` | **[1.0.1]** 净化并粘贴为 Java 字符串，自动转义特殊字符 |
 
@@ -89,7 +93,32 @@
 
 ## 📝 轮回记录 (Changelog)
 
-- **v1.3.2 (导航功能增强)** 🚀 [Latest]
+- **v1.3.7 (三风格统一 & 搜索极速)** 🚀 [Latest]
+  - **Copy REST Full Path 框架扩展**：新增支持 JAX-RS (`@Path`) 和 Feign 风格注解识别，现与 Navigate to Controller 功能对齐
+  - **三风格统一表**：Spring（`@RequestMapping` 等）、JAX-RS（`@Path`）、Feign（`@FeignClient + @RequestMapping`）全支持
+  - **搜索性能优化**：消除缓存初始化后的全量扫描备用逻辑，搜索性能提升 **5-30 倍**（5-30s → 10-50ms 无匹配场景）
+  - **缓存清理命令**：新增 "Clear Controller Navigation Cache" 命令，支持完整清除所有索引数据与磁盘缓存
+
+- **v1.3.6 (缓存隔离)** 🔒
+  - **工作区隔离缓存**：每个工作区使用独立的缓存文件，避免不同项目间缓存混淆
+  - **修复多项目问题**：解决在不同项目间切换时，REST 接口定位到错误文件的问题
+  - **缓存文件格式**：`.vscode-advanced-copy-cache-{工作区哈希}.json`，自动按项目隔离
+
+- **v1.3.5 (缓存优化)** ⏱️
+  - **缓存有效期扩展**：Controller 索引缓存有效期从 1 小时扩展至 5 天
+  - **减少重建频率**：相同工作区内，半天甚至好几天都无需重新构建索引
+  - **保持更新**：Java 文件有实际变化时仍会自动标记缓存为脏，确保数据准确
+
+- **v1.3.4 (搜索匹配增强)** 🔍
+  - **路径后缀匹配**：输入 `/readHistory/create` 自动匹配 `/member/readHistory/create` 等以该路径结尾的完整路径
+  - **智能搜索策略**：精确匹配 → 前缀匹配 → 路径后缀匹配，多层次提高命中率
+  - **搜索流程优化**：缓存搜索时自动回退到路径后缀，无需用户手动切换搜索模式
+
+- **v1.3.3 (快捷键优化)** 🎯
+  - **Copy as JSON 快捷键调整**：改为 `Cmd+Alt+J` (macOS) / `Ctrl+Alt+J` (Windows)，避免系统快捷键冲突
+  - **中文命名统一**：将 "Navigate to Controller" 改为 "粘贴定位 Controller"，保持命名风格一致
+
+- **v1.3.2 (导航功能增强)** 🚀
   - **输入方式优化**：Navigate to Controller 从剪贴板读取改为弹窗输入，支持直接输入 REST 路径或粘贴完整 URL
   - **URL 自动解析**：支持识别完整 URL（如 `http://api.example.com:8080/api/user/list`），自动提取 path 部分（`/api/user/list`），自动去除 query 和 hash
   - **缓存索引加速**：首次使用时构建 Controller REST 路径索引，后续搜索从 ~3-5 秒加速到 ~10ms（**300-500x 性能提升**）
