@@ -991,11 +991,14 @@ async function parseJavaFileForControllers(filePath) {
     // 1️⃣ 检查是否为 Spring REST Controller
     const isSpringController = text.match(/@(?:Rest)?Controller\b/);
 
-    // 2️⃣ 检查是否为 JAX-RS REST Service（带 @Path 或 @Api）
+    // 2️⃣ 检查是否为 Spring Cloud Feign Client
+    const isFeignClient = text.match(/@FeignClient\b/);
+
+    // 3️⃣ 检查是否为 JAX-RS REST Service（带 @Path 或 @Api）
     const isJaxRsService = text.match(/@(?:Path|Api)\b/);
 
-    if (!isSpringController && !isJaxRsService) {
-        // 既不是 Spring 也不是 JAX-RS
+    if (!isSpringController && !isFeignClient && !isJaxRsService) {
+        // 既不是 Spring 也不是 JAX-RS 也不是 Feign
         return {
             package: '',
             className: '',
