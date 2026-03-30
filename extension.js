@@ -1451,9 +1451,15 @@ function getFieldType(symbol, document) {
         let classPath = "";
         let methodPath = "";
 
-        // 使用预编译正则
-        const classMappingMatch = fullText.match(CLASS_MAPPING_REGEX);
+        // 使用预编译正则 - 首先尝试 Spring @RequestMapping
+        let classMappingMatch = fullText.match(CLASS_MAPPING_REGEX);
         if (classMappingMatch) classPath = classMappingMatch[1];
+
+        // 如果没找到 Spring 风格，尝试 JAX-RS @Path（类级别）
+        if (!classPath) {
+            const jaxRsPathMatch = fullText.match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
+            if (jaxRsPathMatch) classPath = jaxRsPathMatch[1];
+        }
 
         if (symbols && Array.isArray(symbols)) {
             function findDetails(list) {
@@ -1495,9 +1501,19 @@ function getFieldType(symbol, document) {
 
         if (!methodPath && methodName) {
             // 向上查找该方法的装饰器（最多查找10行）
+            // 支持三种风格：Spring @RequestMapping、JAX-RS @Path/@Post/@Get 等、Feign @RequestMapping
             for (let i = cursorLine - 1; i >= Math.max(0, cursorLine - 10); i--) {
                 const line = document.lineAt(i).text;
-                const decoratorMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+
+                // Spring 风格：@RequestMapping、@PostMapping、@GetMapping 等
+                let decoratorMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+                if (decoratorMatch) {
+                    methodPath = decoratorMatch[1];
+                    break;
+                }
+
+                // JAX-RS 风格：@Path("...")
+                decoratorMatch = line.match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
                 if (decoratorMatch) {
                     methodPath = decoratorMatch[1];
                     break;
@@ -1511,7 +1527,17 @@ function getFieldType(symbol, document) {
             // 先向下查找（5行内）最近的装饰器
             for (let i = cursorLine; i <= Math.min(document.lineCount - 1, cursorLine + 5); i++) {
                 const line = document.lineAt(i).text;
-                const decoratorMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+
+                // Spring 风格：@RequestMapping、@PostMapping、@GetMapping 等
+                let decoratorMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+                if (decoratorMatch) {
+                    methodPath = decoratorMatch[1];
+                    foundDecoratorLine = i;
+                    break;
+                }
+
+                // JAX-RS 风格：@Path("...")
+                decoratorMatch = line.match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
                 if (decoratorMatch) {
                     methodPath = decoratorMatch[1];
                     foundDecoratorLine = i;
@@ -1523,7 +1549,17 @@ function getFieldType(symbol, document) {
             if (foundDecoratorLine === -1) {
                 for (let i = cursorLine - 1; i >= Math.max(0, cursorLine - 5); i--) {
                     const line = document.lineAt(i).text;
-                    const decoratorMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+
+                    // Spring 风格：@RequestMapping、@PostMapping、@GetMapping 等
+                    let decoratorMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
+                    if (decoratorMatch) {
+                        methodPath = decoratorMatch[1];
+                        foundDecoratorLine = i;
+                        break;
+                    }
+
+                    // JAX-RS 风格：@Path("...")
+                    decoratorMatch = line.match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
                     if (decoratorMatch) {
                         methodPath = decoratorMatch[1];
                         foundDecoratorLine = i;
