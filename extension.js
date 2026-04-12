@@ -30,6 +30,27 @@ const TYPE_CATEGORIES = {
     TEMPORAL: ['date', 'time', 'stamp', 'timestamp', 'localdate', 'localdatetime', 'localtime', 'zoneddatetime', 'instant', 'offsetdatetime', 'period', 'duration', 'calendar']
 };
 
+// SQL 字段过滤：复杂类型关键字（用于 Copy as SQL 功能）
+const COMPLEX_TYPE_KEYWORDS = [
+    'list', 'map', 'set', 'collection', 'array',
+    'stream', 'optional', 'supplier', 'consumer',
+    'function', 'predicate', 'comparator'
+];
+
+// 改进的字段声明正则表达式（支持注解、volatile、嵌套泛型、数组）
+// 支持：@Annotation private volatile String userId;
+//      private final String[] names;
+//      private Map<String, List<User>> data;
+const FIELD_DECLARATION_REGEX = /(?:@\w+(?:\([^)]*\))?\s+)*(?:private|public|protected)?\s+(?:(?:static|final|volatile)\s+)*(?:(?:static|final|volatile)\s+)*(\w+(?:<(?:[^<>]|<[^<>]*>)*>)*(?:\[\])*)\s+(\w+)\s*[;=]/g;
+
+/**
+ * 获取改进的字段声明正则表达式（需要重置 lastIndex，因为使用了 g 标志）
+ */
+function getFieldRegex() {
+    FIELD_DECLARATION_REGEX.lastIndex = 0;
+    return FIELD_DECLARATION_REGEX;
+}
+
 // 性能优化：缓存对象
 const symbolCache = new Map();
 const fieldTypeCache = new Map();
@@ -42,6 +63,7 @@ let suffixIndexL2 = null;              // 第二层后缀索引：所有后缀 �
 let controllerIndexInitialized = false;
 let controllerIndexBuildTime = 0;      // 上次构建时间
 let isIndexBuilding = false;           // 索引构建中标志（防止并发构建）
+const fileToControllersMap = new Map(); // 文件路径 → [Controllers] 映射（用于增量更新）
 
 // 全局变量：用于保存缓存的上下文和磁盘路径
 let globalContext = null;
@@ -391,12 +413,30 @@ function getMagicValue(type) {
 }
 
 /**
- * 判断是否为基础类型
+ * 判断字段类型是否为复杂类型（应该从 SQL 中排除）
+ * 用于 Copy as SQL 功能，过滤集合、流等非数据库列类型
+ */
+function isComplexType(fieldType) {
+    if (!fieldType) return false;
+    const lower = fieldType.toLowerCase();
+    return COMPLEX_TYPE_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+/**
+ * 判断是否为基础类型（仅保留可以映射到数据库的基础类型）
+ * 排除：List、Map、Set、Collection 和其他自定义对象类型
  */
 function isBaseType(type) {
     if (!type) return false;
     const t = type.toLowerCase().replace(/[<>]/g, '').trim();
 
+    // 首先检查是否是明确的复杂类型
+    if (t.includes('list') || t.includes('map') || t.includes('set') ||
+        t.includes('collection') || t.includes('array')) {
+        return false;
+    }
+
+    // 然后检查是否是已知的基础类型
     return isTypeCategory(t, 'NUMERIC') ||
            isTypeCategory(t, 'STRING') ||
            isTypeCategory(t, 'BOOLEAN') ||
@@ -850,6 +890,151 @@ function findByLayeredPrefix(inputPath, layeredIndex) {
 }
 
 /**
+ * 增量更新 Controller 索引（仅更新指定文件的数据）
+ * 删除该文件的旧数据，重新解析并添加新数据
+ * @param {string} filePath - 需要更新的 Java 文件路径
+ * @param {string} operation - 操作类型：'change' | 'delete' | 'create'
+ * @returns {Promise<{updated: number, added: number}>}
+ */
+async function incrementalUpdateIndex(filePath, operation = 'change') {
+    // 防止与全量构建并发
+    if (isIndexBuilding) {
+        console.log(`⏳ 索引正在构建中，将 ${filePath} 的变化加入待处理`);
+        CHANGED_FILES.add(filePath);
+        return { updated: 0, added: 0 };
+    }
+
+    const startTime = Date.now();
+
+    try {
+        // 第1步：删除该文件的旧数据
+        const oldControllers = fileToControllersMap.get(filePath) || [];
+        let deletedCount = 0;
+
+        for (const oldController of oldControllers) {
+            const path = oldController.fullPath;
+            const controllers = controllerPathIndex.get(path) || [];
+
+            // 从路径索引中删除
+            const filtered = controllers.filter(c => c.file !== filePath);
+            if (filtered.length === 0) {
+                controllerPathIndex.delete(path);
+                // 从分层索引中删除
+                const segments = path.split('/').filter(Boolean);
+                if (segments.length > 0) {
+                    let layeredNode = controllerLayeredIndex;
+                    for (let i = 0; i < segments.length; i++) {
+                        if (i === segments.length - 1 && layeredNode[segments[i]]) {
+                            layeredNode[segments[i]].__controllers =
+                                layeredNode[segments[i]].__controllers.filter(c => c.file !== filePath);
+                        }
+                        layeredNode = layeredNode[segments[i]]?.__children || {};
+                    }
+                }
+                // 从后缀索引中删除
+                if (segments.length > 0) {
+                    const lastSegment = segments[segments.length - 1];
+                    const paths = suffixIndexL1.get(lastSegment) || [];
+                    suffixIndexL1.set(lastSegment, paths.filter(p => p !== path));
+                }
+            } else {
+                controllerPathIndex.set(path, filtered);
+            }
+            deletedCount++;
+        }
+
+        // 第2步：重新解析该文件
+        let newControllers = [];
+        let addedCount = 0;
+
+        if (operation !== 'delete') {
+            try {
+                const parseResult = await parseJavaFileForControllers(filePath);
+
+                for (const method of parseResult.methods) {
+                    const path = method.fullPath;
+                    const controller = {
+                        file: filePath,
+                        package: parseResult.package,
+                        className: parseResult.className,
+                        methodName: method.name,
+                        line: method.line,
+                        fullPath: path
+                    };
+
+                    // 添加到路径索引
+                    if (!controllerPathIndex.has(path)) {
+                        controllerPathIndex.set(path, []);
+                    }
+                    controllerPathIndex.get(path).push(controller);
+
+                    // 添加到分层索引
+                    const segments = path.split('/').filter(Boolean);
+                    let layeredNode = controllerLayeredIndex;
+
+                    for (let i = 0; i < segments.length; i++) {
+                        const segment = segments[i];
+
+                        if (!layeredNode[segment]) {
+                            layeredNode[segment] = {
+                                __controllers: [],
+                                __children: {}
+                            };
+                        }
+
+                        if (i === segments.length - 1) {
+                            layeredNode[segment].__controllers.push(controller);
+                        }
+
+                        layeredNode = layeredNode[segment].__children;
+                    }
+
+                    // 添加到后缀索引
+                    if (segments.length > 0) {
+                        const lastSegment = segments[segments.length - 1];
+                        if (!suffixIndexL1.has(lastSegment)) {
+                            suffixIndexL1.set(lastSegment, []);
+                        }
+                        suffixIndexL1.get(lastSegment).push(path);
+                    }
+
+                    newControllers.push(controller);
+                    addedCount++;
+                }
+
+                // 第二层后缀索引需要重建（删除旧的，懒加载重建）
+                suffixIndexL2 = null;
+
+                console.log(`✅ 增量更新完成: ${filePath} | 删除 ${deletedCount} 个旧路由，新增 ${addedCount} 个路由 (${Date.now() - startTime}ms)`);
+            } catch (error) {
+                console.warn(`⚠️  增量更新失败，保留旧缓存: ${filePath} - ${error.message}`);
+                // 保留旧缓存，不做变更
+                return { updated: deletedCount, added: 0 };
+            }
+        } else {
+            console.log(`🗑️  文件已删除，移除 ${deletedCount} 个路由: ${filePath}`);
+        }
+
+        // 第3步：更新 fileToControllersMap
+        if (newControllers.length > 0) {
+            fileToControllersMap.set(filePath, newControllers);
+        } else {
+            fileToControllersMap.delete(filePath);
+        }
+
+        // 第4步：保存缓存
+        if (controllerIndexInitialized) {
+            saveCache();
+        }
+
+        return { updated: deletedCount, added: addedCount };
+    } catch (error) {
+        console.error(`❌ 增量更新异常: ${filePath} - ${error.message}`);
+        return { updated: 0, added: 0 };
+    }
+}
+
+/**
  * 构建或更新 Controller REST 路径索引
  * 扫描所有 Java 文件，提取所有 REST 路径，构建快速查询索引
  * @returns {Promise<{count: number, time: number}>}
@@ -869,6 +1054,7 @@ async function buildControllerPathIndex() {
         Object.keys(controllerLayeredIndex).forEach(key => delete controllerLayeredIndex[key]);
         suffixIndexL1.clear();
         suffixIndexL2 = null;  // 第二层重置为 null，下次需要时再构建
+        fileToControllersMap.clear();  // 清空文件→控制器映射
 
         // 显示构建进度
         const result = await vscode.window.withProgress(
@@ -886,6 +1072,7 @@ async function buildControllerPathIndex() {
                 for (const fileUri of javaFiles) {
                     try {
                         const parseResult = await parseJavaFileForControllers(fileUri.fsPath);
+                        const fileControllers = [];  // 存储该文件的所有 controller
 
                         // 为每个方法构建所有索引（单次遍历，高效！）
                         for (const method of parseResult.methods) {
@@ -898,6 +1085,8 @@ async function buildControllerPathIndex() {
                                 line: method.line,
                                 fullPath: path  // 添加 fullPath 以便后续使用
                             };
+
+                            fileControllers.push(controller);  // 记录到文件级别
 
                             // 1️⃣ 添加到路径索引
                             if (!controllerPathIndex.has(path)) {
@@ -938,6 +1127,11 @@ async function buildControllerPathIndex() {
                                 }
                                 suffixIndexL1.get(lastSegment).push(path);
                             }
+                        }
+
+                        // 记录该文件的所有 controller（用于增量更新）
+                        if (fileControllers.length > 0) {
+                            fileToControllersMap.set(fileUri.fsPath, fileControllers);
                         }
 
                         processedCount++;
@@ -1727,7 +1921,7 @@ function getFieldType(symbol, document) {
                     const classText = fullText.substring(classStart);
 
                     // 提取字段定义（简单正则，查找 private/public 字段）
-                    const fieldRegex = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                    const fieldRegex = getFieldRegex();
                     const fields = {};
                     let fieldMatch;
 
@@ -2142,7 +2336,7 @@ let copyAsJson = vscode.commands.registerCommand('advCopy.copyAsBean', async () 
                 const posInClass = document.offsetAt(pos) - classStartPos;
 
                 // 查找光标位置所在的字段
-                const fieldRegex = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                const fieldRegex = getFieldRegex();
                 let fieldFound = false;
                 let match;
 
@@ -2167,7 +2361,7 @@ let copyAsJson = vscode.commands.registerCommand('advCopy.copyAsBean', async () 
 
                 // 如果没有找到字段，提取整个类的所有字段（兜底）
                 if (!fieldFound) {
-                    const fieldRegex2 = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                    const fieldRegex2 = getFieldRegex();
                     let m;
                     while ((m = fieldRegex2.exec(classText)) !== null) {
                         const fieldType = m[1].toLowerCase();
@@ -2180,7 +2374,7 @@ let copyAsJson = vscode.commands.registerCommand('advCopy.copyAsBean', async () 
                 }
             } else {
                 // 划选模式：首先尝试找选中范围的字段
-                const fieldRegex = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                const fieldRegex = getFieldRegex();
                 let match;
                 let selectedCount = 0;
 
@@ -2205,7 +2399,7 @@ let copyAsJson = vscode.commands.registerCommand('advCopy.copyAsBean', async () 
 
                 // 如果划选没有找到任何字段，兜底为整个类的所有字段
                 if (selectedCount === 0) {
-                    const fieldRegex2 = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                    const fieldRegex2 = getFieldRegex();
                     let m;
                     while ((m = fieldRegex2.exec(classText)) !== null) {
                         const fieldName = m[2];
@@ -2288,24 +2482,31 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                 const rawName = targetClass.name.includes('.') ? targetClass.name.split('.').pop() : targetClass.name;
                 tableName = cleanTableName(rawName);
                 foundClass = true;
-                // 提取该类下的所有基础类型字段（过滤static和final）
+                // 提取该类下的所有字段（过滤static和final和复杂类型）
                 allFields.forEach(f => {
                     if (targetClass.range.contains(f.range.start)) {
                         const fieldLine = document.lineAt(f.range.start.line);
-                        const fieldType = getFieldType(f, document);
-                        // 只有非static/final的基础类型字段才添加
-                        if (isBaseType(fieldType) && !isStaticOrFinalField(fieldLine.text)) {
-                            columns.push(toSnakeCase(f.name));
+                        if (!isStaticOrFinalField(fieldLine.text)) {
+                            const fieldType = getFieldType(f, document);
+                            // 只排除明显的复杂类型（List、Map、Set、Stream、Optional等）
+                            if (fieldType && !isComplexType(fieldType)) {
+                                columns.push(toSnakeCase(f.name));
+                            }
                         }
                     }
                 });
+                // 如果没有找到任何字段，使用通配符
+                if (columns.length === 0) {
+                    useWildcard = true;
+                }
             } else {
-                // 如果找不到 targetClass，尝试从所有基础类型字段中提取（兜底方案）
+                // 如果找不到 targetClass，尝试从所有字段中提取（兜底方案）
                 // 这可以解决 Symbol 提供者在某些情况下无法识别类的问题
                 allFields.forEach(f => {
                     const fieldLine = document.lineAt(f.range.start.line);
                     const fieldType = getFieldType(f, document);
-                    if (isBaseType(fieldType) && !isStaticOrFinalField(fieldLine.text)) {
+                    if (!isStaticOrFinalField(fieldLine.text) &&
+                        fieldType && !isComplexType(fieldType)) {
                         columns.push(toSnakeCase(f.name));
                     }
                 });
@@ -2317,9 +2518,13 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                 const fieldLine = f.range.start.line;
                 if (fieldLine >= selection.start.line && fieldLine <= selection.end.line) {
                     const fieldText = document.lineAt(fieldLine).text;
-                    if (isBaseType(getFieldType(f, document)) && !isStaticOrFinalField(fieldText)) {
-                        columns.push(toSnakeCase(f.name));
-                        selectedFields.push(f);
+                    if (!isStaticOrFinalField(fieldText)) {
+                        const fieldType = getFieldType(f, document);
+                        // 只排除明显的复杂类型（List、Map、Set、Stream、Optional等）
+                        if (fieldType && !isComplexType(fieldType)) {
+                            columns.push(toSnakeCase(f.name));
+                            selectedFields.push(f);
+                        }
                     }
                 }
             });
@@ -2387,7 +2592,7 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                 const posInClass = document.offsetAt(pos) - classStartPos;
 
                 // 查找光标位置所在的字段
-                const fieldRegex = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                const fieldRegex = getFieldRegex();
                 let fieldFound = false;
                 let match;
 
@@ -2401,13 +2606,8 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                     if (posInClass >= fieldStart && posInClass <= fieldEnd && fieldName !== 'serialVersionUID') {
                         // 过滤掉 static 和 final 字段
                         if (!isStaticOrFinalField(match[0])) {
-                            // 只复制基础类型字段
-                            if (fieldType.includes('string') || fieldType.includes('char') ||
-                                fieldType.includes('integer') || fieldType.includes('int') ||
-                                fieldType.includes('long') || fieldType.includes('byte') ||
-                                fieldType.includes('short') || fieldType.includes('double') ||
-                                fieldType.includes('float') || fieldType.includes('boolean') ||
-                                fieldType.includes('date') || fieldType.includes('time')) {
+                            // 排除复杂集合类型（List、Map、Set、Stream、Optional等）
+                            if (!isComplexType(fieldType)) {
                                 columns.push(toSnakeCase(fieldName));
                             }
                         }
@@ -2416,27 +2616,21 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                     }
                 }
 
-                // 如果没有找到字段，提取整个类的所有基础类型字段
+                // 如果没有找到字段，提取整个类的所有非复杂类型字段
                 if (!fieldFound) {
-                    const fieldRegex2 = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                    const fieldRegex2 = getFieldRegex();
                     let m;
                     while ((m = fieldRegex2.exec(classText)) !== null) {
                         const fieldName = m[2];
                         const fieldType = m[1].toLowerCase();
-                        // 过滤掉 static 和 final 字段
+                        // 过滤掉 static、final 和复杂集合类型字段
                         if (fieldName === 'serialVersionUID' || isStaticOrFinalField(m[0])) continue;
+                        if (isComplexType(fieldType)) continue;
 
-                        if (fieldType.includes('string') || fieldType.includes('char') ||
-                            fieldType.includes('integer') || fieldType.includes('int') ||
-                            fieldType.includes('long') || fieldType.includes('byte') ||
-                            fieldType.includes('short') || fieldType.includes('double') ||
-                            fieldType.includes('float') || fieldType.includes('boolean') ||
-                            fieldType.includes('date') || fieldType.includes('time')) {
-                            columns.push(toSnakeCase(fieldName));
-                        }
+                        columns.push(toSnakeCase(fieldName));
                     }
 
-                    // 如果仍然没有找到任何基础类型字段，标记为使用通配符
+                    // 如果仍然没有找到任何字段，标记为使用通配符
                     if (columns.length === 0) {
                         useWildcard = true;
                     }
@@ -2448,7 +2642,7 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                 const selectionStartInClass = selectionStartOffset - classStartPos;
                 const selectionEndInClass = selectionEndOffset - classStartPos;
 
-                const fieldRegex = /(?:private|public|protected)?\s+(?:static\s+)?(\w+(?:<[^>]*>)?)\s+(\w+)\s*[;=]/g;
+                const fieldRegex = getFieldRegex();
                 let match;
                 let selectedCount = 0;
 
@@ -2459,12 +2653,8 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
                     const fieldEnd = match.index + match[0].length;
 
                     if (fieldName !== 'serialVersionUID' && !isStaticOrFinalField(match[0]) && fieldStart >= selectionStartInClass && fieldEnd <= selectionEndInClass) {
-                        if (fieldType.includes('string') || fieldType.includes('char') ||
-                            fieldType.includes('integer') || fieldType.includes('int') ||
-                            fieldType.includes('long') || fieldType.includes('byte') ||
-                            fieldType.includes('short') || fieldType.includes('double') ||
-                            fieldType.includes('float') || fieldType.includes('boolean') ||
-                            fieldType.includes('date') || fieldType.includes('time')) {
+                        // 排除复杂集合类型（List、Map、Set、Stream、Optional等）
+                        if (!isComplexType(fieldType)) {
                             columns.push(toSnakeCase(fieldName));
                             selectedCount++;
                         }
@@ -2658,43 +2848,61 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
 
     fileWatcher.onDidCreate((event) => {
-        // 新增 Java 文件，仅标记缓存为脏，不立即清空
+        // 新增 Java 文件，如果缓存已初始化则增量添加，否则标记为脏等待全量重建
         if (isIndexBuilding) return;
 
         clearTimeout(cacheInvalidateTimer);
-        cacheInvalidateTimer = setTimeout(() => {
+        cacheInvalidateTimer = setTimeout(async () => {
             if (!isIndexBuilding) {
-                console.log('📝 检测到新增文件，缓存标记为脏（下次搜索时增量更新）');
-                CHANGED_FILES.add(event.fsPath);
-                controllerIndexInitialized = false;  // 标记缓存需要刷新
+                if (controllerIndexInitialized) {
+                    // 缓存已初始化，执行增量更新
+                    console.log('📝 检测到新增文件，执行增量更新...');
+                    await incrementalUpdateIndex(event.fsPath, 'create');
+                } else {
+                    // 缓存未初始化，标记变化文件等待全量重建
+                    console.log('📝 检测到新增文件，缓存未初始化，标记为待处理');
+                    CHANGED_FILES.add(event.fsPath);
+                }
             }
         }, CACHE_INVALIDATE_DELAY);
     });
 
     fileWatcher.onDidChange((event) => {
-        // 文件被修改，仅标记缓存为脏
+        // 文件被修改，如果缓存已初始化则增量更新，否则标记为脏
         if (isIndexBuilding) return;
 
         clearTimeout(cacheInvalidateTimer);
-        cacheInvalidateTimer = setTimeout(() => {
+        cacheInvalidateTimer = setTimeout(async () => {
             if (!isIndexBuilding) {
-                console.log('📝 检测到文件修改，缓存标记为脏（下次搜索时增量更新）');
-                CHANGED_FILES.add(event.fsPath);
-                controllerIndexInitialized = false;
+                if (controllerIndexInitialized) {
+                    // 缓存已初始化，执行增量更新（立即反映变化）
+                    console.log('📝 检测到文件修改，执行增量更新...');
+                    await incrementalUpdateIndex(event.fsPath, 'change');
+                } else {
+                    // 缓存未初始化，标记变化文件等待全量重建
+                    console.log('📝 检测到文件修改，缓存未初始化，标记为待处理');
+                    CHANGED_FILES.add(event.fsPath);
+                }
             }
         }, CACHE_INVALIDATE_DELAY);
     });
 
     fileWatcher.onDidDelete((event) => {
-        // 文件被删除，仅标记缓存为脏
+        // 文件被删除，从索引中删除该文件的数据
         if (isIndexBuilding) return;
 
         clearTimeout(cacheInvalidateTimer);
-        cacheInvalidateTimer = setTimeout(() => {
+        cacheInvalidateTimer = setTimeout(async () => {
             if (!isIndexBuilding) {
-                console.log('📝 检测到文件删除，缓存标记为脏（下次搜索时增量更新）');
-                CHANGED_FILES.add(event.fsPath);
-                controllerIndexInitialized = false;
+                if (controllerIndexInitialized) {
+                    // 缓存已初始化，执行增量删除
+                    console.log('📝 检测到文件删除，从索引移除...');
+                    await incrementalUpdateIndex(event.fsPath, 'delete');
+                } else {
+                    // 缓存未初始化，标记变化文件等待全量重建
+                    console.log('📝 检测到文件删除，缓存未初始化，标记为待处理');
+                    CHANGED_FILES.add(event.fsPath);
+                }
             }
         }, CACHE_INVALIDATE_DELAY);
     });

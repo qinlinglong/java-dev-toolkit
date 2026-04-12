@@ -1,195 +1,77 @@
 {
-  "name": "advanced-copy-for-java",
-  "displayName": "Advanced Copy for Java",
-  "description": "Java 开发利器：支持复制引用路径、REST 接口路径、Arthas 命令生成及 JSON 结构重现。",
-  "version": "1.3.7",
-  "publisher": "qinlinglong",
-  "author": "qinlinglong",
-  "icon": "logo-128.png",
-  "engines": {
-    "vscode": "^1.75.0"
-  },
-  "main": "./extension.js",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/qinlinglong/advanced-copy"
-  },
-  "activationEvents": [
-    "onLanguage:java"
-  ],
-  "contributes": {
-    "submenus": [
-      {
-        "id": "advCopy.mainSubmenu",
-        "label": "Advanced Copy",
-        "icon": "$(zap)"
-      }
-    ],
-    "commands": [
-      {
-        "command": "advCopy.copyReference",
-        "title": "Copy Reference (Java Path)"
-      },
-      {
-        "command": "advCopy.copyRestPath",
-        "title": "Copy REST Full Path"
-      },
-      {
-        "command": "advCopy.copyVmtool",
-        "title": "Copy Arthas Vmtool"
-      },
-      {
-        "command": "advCopy.copyTimeTunnel",
-        "title": "Copy Arthas TimeTunnel"
-      },
-      {
-        "command": "advCopy.copyAsBean",
-        "title": "Copy as JSON"
-      },
-      {
-        "command": "advCopy.copySqlSelect",
-        "title": "Copy as SQL Select"
-      },
-      {
-        "command": "advCopy.copyPlainText",
-        "title": "Copy Pure Content"
-      },
-      {
-        "command": "advCopy.pastePlainText",
-        "title": "Paste as Java String"
-      },
-      {
-        "command": "advCopy.arthQuickMenu",
-        "title": "Copy More Arthas Commands"
-      },
-      {
-        "command": "advCopy.navigateToController",
-        "title": "Navigate to Controller"
-      },
-      {
-        "command": "advCopy.clearControllerCache",
-        "title": "Clear Controller Navigation Cache"
-      }
-    ],
-    "menus": {
-      "advCopy.mainSubmenu": [
-        {
-          "command": "advCopy.copyReference",
-          "group": "1_path@1"
-        },
-        {
-          "command": "advCopy.copyRestPath",
-          "group": "1_path@2"
-        },
-        {
-          "command": "advCopy.copyVmtool",
-          "group": "2_arthas@1"
-        },
-        {
-          "command": "advCopy.copyTimeTunnel",
-          "group": "2_arthas@2"
-        },
-        {
-          "command": "advCopy.arthQuickMenu",
-          "group": "2_arthas@3"
-        },
-        {
-          "command": "advCopy.navigateToController",
-          "group": "2_arthas@4"
-        },
-        {
-          "command": "advCopy.clearControllerCache",
-          "group": "5_cache@1"
-        },
-        {
-          "command": "advCopy.copyAsBean",
-          "group": "3_data@1"
-        },
-        {
-          "command": "advCopy.copySqlSelect",
-          "group": "3_data@2"
-        },
-        {
-          "command": "advCopy.copyPlainText",
-          "group": "4_text@1"
-        },
-        {
-          "command": "advCopy.pastePlainText",
-          "group": "4_text@2"
-        }
-      ],
-      "editor/context": [
-        {
-          "submenu": "advCopy.mainSubmenu",
-          "group": "9_cutcopypaste",
-          "when": "editorTextFocus"
-        }
-      ]
+    "name": "advanced-copy-for-java",
+    "displayName": "Advanced Copy for Java",
+    "description": "Advanced copy functionality for Java projects with REST navigation",
+    "version": "0.1.7",
+    "engines": {
+        "vscode": "^1.60.0"
     },
-    "keybindings": [
-      {
-        "command": "advCopy.copyReference",
-        "key": "ctrl+alt+r",
-        "mac": "cmd+alt+r",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.copyRestPath",
-        "key": "ctrl+alt+a",
-        "mac": "cmd+alt+a",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.copyAsBean",
-        "key": "ctrl+alt+j",
-        "mac": "cmd+alt+j",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.copyVmtool",
-        "key": "ctrl+alt+1",
-        "mac": "cmd+alt+1",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.copyTimeTunnel",
-        "key": "ctrl+alt+2",
-        "mac": "cmd+alt+2",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.copySqlSelect",
-        "key": "ctrl+alt+q",
-        "mac": "cmd+alt+q",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.copyPlainText",
-        "key": "ctrl+shift+c",
-        "mac": "cmd+shift+c",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "advCopy.pastePlainText",
-        "key": "ctrl+shift+v",
-        "mac": "cmd+shift+v",
-        "when": "editorTextFocus"
-      },
-      {
-        "command": "advCopy.arthQuickMenu",
-        "key": "ctrl+alt+3",
-        "mac": "cmd+alt+3",
-        "when": "editorTextFocus && editorLangId == java"
-      },
-      {
-        "command": "advCopy.navigateToController",
-        "key": "ctrl+alt+n",
-        "mac": "cmd+alt+n"
-      }
-    ]
-  },
-  "devDependencies": {
-    "sharp": "^0.34.5",
-    "vsce": "^2.15.0"
-  }
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onLanguage:java",
+        "onCommand:advanced-copy-java.copyQualifiedName",
+        "onCommand:advanced-copy-java.copyRelativePath",
+        "onCommand:advanced-copy-java.copyWithPackage",
+        "onCommand:advanced-copy-java.restNavigate"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "advanced-copy-java.copyQualifiedName",
+                "title": "Copy Java Class Qualified Name"
+            },
+            {
+                "command": "advanced-copy-java.copyRelativePath",
+                "title": "Copy Relative Path"
+            },
+            {
+                "command": "advanced-copy-java.copyWithPackage",
+                "title": "Copy Full Content with Package Info"
+            },
+            {
+                "command": "advanced-copy-java.restNavigate",
+                "title": "REST Navigation to Java Class (Fuzzy Matching)"
+            }
+        ],
+        "menus": {
+            "editor/context": [
+                {
+                    "command": "advanced-copy-java.copyQualifiedName",
+                    "group": "copy"
+                },
+                {
+                    "command": "advanced-copy-java.copyRelativePath",
+                    "group": "copy"
+                },
+                {
+                    "command": "advanced-copy-java.copyWithPackage",
+                    "group": "copy"
+                },
+                {
+                    "command": "advanced-copy-java.restNavigate",
+                    "group": "navigation"
+                }
+            ]
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile && npm run lint",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/node": "14.x",
+        "@types/vscode": "^1.60.0",
+        "@typescript-eslint/eslint-plugin": "^5.38.0",
+        "@typescript-eslint/parser": "^5.38.0",
+        "@vscode/vsce": "^3.7.1",
+        "eslint": "^8.24.0",
+        "typescript": "^4.8.4"
+    }
 }

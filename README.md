@@ -1,178 +1,433 @@
-# Advanced Copy (Hiruko Edition) 👁️
+# Java Dev Toolkit
 
-[![Version](https://img.shields.io/badge/version-1.3.7-red.svg)](https://github.com/qinlinglong/advanced-copy)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/qinlinglong/advanced-copy)
+[![Language](https://img.shields.io/badge/language-English%20%7C%20中文-brightgreen.svg)](#readme-languages)
 
-**Advanced Copy** 现已觉醒为 **Hiruko (蛭子)** 究极形态。
-基于《夏日重现》古神权能，旨在通过高效的”观测”与”重现”，破解繁琐的编码与诊断工作。在 Hiruko 的注视下，所有的代码逻辑都将化为确定的”真实”。
+<div id="readme-languages">
 
-> **v1.3.7 多框架支持 & 搜索优化** 🚀
-> - **三风格统一**：Copy REST Full Path 与 Navigate to Controller 同时支持 Spring、JAX-RS、Feign 三种 REST 框架风格
-> - **搜索极速化**：消除缓存命中时的全量扫描，搜索性能提升 **5-30 倍**（5-30s → 10-50ms）
+[🇺🇸 English](#english-version) | [🇨🇳 中文](#chinese-version)
 
----
-
-## ⌨️ 快捷键矩阵 (Keybindings) - 快速施放权能
-
-在 Hiruko 的注视下，效率即是正义。你可以通过以下组合键（macOS 为 `Cmd`）直接施放权能：
-
-### 核心快捷键
-| 权能 (Action) | Windows / Linux | macOS | 效果 (Effect) |
-| :--- | :--- | :--- | :--- |
-| **复制为 SQL** | `Ctrl + Alt + Q` | `Cmd + Alt + Q` | 瞬发：将实体转化为 Snake Case SQL |
-| **复制为 JSON** | `Ctrl + Alt + J` | `Cmd + Alt + J` | 瞬发：将选区或类转化为 Mock JSON |
-| **复制 REST 路径** | `Ctrl + Alt + A` | `Cmd + Alt + A` | 瞬发：捕捉接口完整映射路径 |
-| **复制引用路径** | `Ctrl + Alt + R` | `Cmd + Alt + R` | 瞬发：提取 Java 全限定路径 |
-| **复制 Arthas Vmtool** | `Ctrl + Alt + 1` | `Cmd + Alt + 1` | 瞬发：生成 vmtool 诊断命令 |
-| **复制 Arthas TT** | `Ctrl + Alt + 2` | `Cmd + Alt + 2` | 瞬发：生成 tt 记录命令 |
-| **📚 Arthas 命令库** | `Ctrl + Alt + 3` | `Cmd + Alt + 3` | **⭐ 新增**：快速访问 59 个 Arthas 命令 |
-| **粘贴定位 Controller** | `Ctrl + Alt + N` | `Cmd + Alt + N` | **⭐ v1.3.2 增强**：输入或粘贴 REST 路径/URL，智能提取并定位 Controller，支持缓存索引加速 |
-| **智能粘贴器** | `Ctrl + Shift + V` | `Cmd + Shift + V` | 瞬发：净化并粘贴为 Java 字符串 |
-| **复制纯文本** | `Ctrl + Shift + C` | `Cmd + Shift + C` | 瞬发：剥离转义字符，净化为原始内容 |
+</div>
 
 ---
 
-## ✨ 核心权能 (Divine Authorities)
+<a id="english-version"></a>
 
-### 1. 🔥 性能境界突破 (Performance Transcendence) - **v1.2.0 新祭坛**
-**观测加速密仪**：通过预编译、多层缓存与异步化三重古老遗物，Hiruko 的观测速度迎来 **5-100 倍** 的因果跃升。
-- **预编译正则祭坛** ⚡：消除重复编译，正则执行效能提升 **~50%**
-- **多维缓存映射** 🔮：文档级符号缓存 + 字段类型缓存，快速连续操作减少 API 调用 **~80%**
-- **高效集合结构** 📊：用 `Set` 数据结构替代数组检查，符号类型判断从 O(n) → O(1)，性能突破 **~100x**
-- **非阻塞异步觉醒** ✨：版本检查、符号解析全面异步化，主线程永无阻塞，激活速度无感知
-- **代码去重净化** 🧹：消除 44 行重复代码，统一工具函数库，可维护性提升
+# English Version
 
-### 2. 📚 Arthas 神兵库 (Arthas Command Library) - **v1.3.0 新增**
-**诊断权能扩展至 59 个**：从 15 个命令扩展到 59 个，覆盖方法监控、类检查、全局监控的所有场景。
-- **方法相关** (22 个)：watch、trace、stack、monitor、sm、tt、ognl、getstatic 等完整工作流
-- **类相关** (13 个)：jad、sc、classloader、dump、redefine、mbean 等类加载诊断
-- **全局命令** (24 个)：sysprop、thread、jvm、dashboard、heapdump、histogram、vmtool、vmoption、perfcounter、profiler 等
+**Java Dev Toolkit** — Essential tools for Java developers.
 
-使用 `Cmd+Alt+3` (Mac) 或 `Ctrl+Alt+3` (Windows/Linux) 快速打开命令库！
+A comprehensive VSCode extension designed for Java developers, featuring quick copy, format conversion, REST API navigation, and Arthas diagnostic commands to boost productivity.
 
-### 3. 📊 复制为 SQL (Copy as SQL Select) - **v1.3.0 字段识别完美重铸**
-**1.3.0 字段识别优化 & 1.2.0 性能重铸 & 1.1.4 觉醒权能**：将 Java 实体类直接投影为数据库祭坛的查询供物。
-- **自动转译**：智能将驼峰命名（CamelCase）解析为下划线命名（snake_case）。
-- **表名清洗**：自动识别并清洗 `DTO/Entity/VO/POJO/Bean` 后缀，还原真实的数据库表名。
-- **基础类型过滤**：精准观测，自动剔除 `List`、`Map` 等非基础数据库字段，仅保留有效的”数据维度”。
-- **字段识别完美重铸**：即使类中仅包含复杂类型字段，也能正确识别或使用通配符，永不误用 `SELECT *`。
+## ⌨️ Keyboard Shortcuts Matrix
 
-### 4. 📋 复制为 JSON (Copy as JSON) - **数据镜像**
-**1.2.0 性能优化 & 1.1.4 权能飞跃**：支持**基于选区的局部镜像重现**，并新增统一的类型判断系统。
-- **精准映射**：修复数值类型识别偏移，实现 `Integer`、`BigDecimal`、`Long` 等与数字 `0` 的因果对齐。
-- **选区重现**：选中部分字段即生成局部 JSON，选中类名即生成全量 JSON 镜像。
-- **动态时间戳** ⏰：Mock 日期/时间字段时，自动使用当前系统时间（而非固定时间），实时同步观测时刻。
-- **类型缓存加速**：字段类型解析结果缓存，重复操作性能提升 **~70%**
+Right-click to open the menu or use these keyboard shortcuts:
 
-### 5. 🛠️ REST 路径观测 (REST Path) - **接口完整映射**
-**1.1.4 新瞳觉醒 & v1.3.7 三风格统一**：支持 Spring MVC、JAX-RS、Spring Cloud Feign 三种主流 REST 框架注解识别与路径自动拼接。
-- **完整路径拼接**：自动融合 Controller 与 Method 层的 Mapping 路径
-- **Spring 风格**：`@RequestMapping`、`@GetMapping`、`@PostMapping` 等全系列注解 ✅
-- **JAX-RS 风格**：`@Path` 注解（类和方法级别）✅ **v1.3.7 新增**
-- **Feign 风格**：`@FeignClient` + `@RequestMapping` 组合 ✅ **v1.3.7 完整验证**
-
----
-
-## 🛠 使用方法 (Usage)
-
-在代码编辑器中点击 **鼠标右键**，唤醒 **Advanced Copy** 祭坛：
-
-| 功能 | 标识 | 说明 |
+| Feature | Shortcut (Windows/Linux) | Shortcut (macOS) |
 | :--- | :--- | :--- |
-| **Copy Reference** | `$(file)` | **[1.0.0]** 核心功能：提取 Java 全限定路径（包名+类名+方法名） |
-| **Copy REST Full Path**| `$(link)` | **[1.1.4]** 自动融合 Controller 与 Method 层的 Mapping 路径；**[v1.3.7]** 支持 Spring、JAX-RS、Feign 三种框架风格 |
-| **Copy as SQL Select** | `$(database)` | **[1.3.0]** 完美识别字段，支持下划线转译与表名清洗，修复字段遗漏问题 |
-| **Copy as JSON** | `$(beaker)` | **[1.1.4]** 选区智能解析，修复数值类型映射精度 |
-| **Copy Arthas Vmtool** | `$(zap)` | **[1.2.0]** 穿透内存的诊断神谕，智能自动识别参数类型并拼接，中文参数自动转 Unicode 编码确保跨域安全执行 |
-| **Copy Arthas TimeTunnel** | `$(history)` | **[1.1.4]** 生成方法执行记录命令，实现生产现场回溯 |
-| **Copy More Arthas Commands** | `$(zap)` | **[1.3.0]** 快速访问 59 个 Arthas 诊断命令库 |
-| **粘贴定位 Controller** | `$(arrow-right)` | **[1.3.2]** 输入或粘贴 REST 路径/完整 URL，智能提取并快速定位对应 Controller，支持缓存索引加速、文件自动更新；**[v1.3.7]** 支持 Spring、JAX-RS、Feign 三种框架风格；搜索性能提升 **5-30 倍** |
-| **Copy Pure Content** | `$(copy)` | **[1.0.1]** 剥离转义字符，净化为原始 JSON/文本 |
-| **Paste as Java String** | `$(paste)` | **[1.0.1]** 净化并粘贴为 Java 字符串，自动转义特殊字符 |
+| **Copy Reference** | `Ctrl+Alt+R` | `Cmd+Alt+R` |
+| **Copy REST Full Path** | `Ctrl+Alt+A` | `Cmd+Alt+A` |
+| **Navigate to Controller** | `Ctrl+Alt+N` | `Cmd+Alt+N` |
+| **Copy as JSON** | `Ctrl+Alt+J` | `Cmd+Alt+J` |
+| **Copy as SQL Select** | `Ctrl+Alt+Q` | `Cmd+Alt+Q` |
+| **Copy Arthas Vmtool** | `Ctrl+Alt+1` | `Cmd+Alt+1` |
+| **Copy Arthas TimeTunnel** | `Ctrl+Alt+2` | `Cmd+Alt+2` |
+| **Copy More Arthas Commands** | `Ctrl+Alt+3` | `Cmd+Alt+3` |
+| **Copy Pure Content** | `Ctrl+Shift+C` | `Cmd+Shift+C` |
+| **Paste as Java String** | `Ctrl+Shift+V` | `Cmd+Shift+V` |
+
+## ✨ Features
+
+### 1️⃣ 📌 Copy Reference
+Extract Java fully qualified paths (package + class + method) for quick reference copying.
+- **Use Case**: Documentation, logging, code references
+- **Shortcut**: `Ctrl+Alt+R` (Windows) / `Cmd+Alt+R` (macOS)
+
+### 2️⃣ 🌐 Copy REST Full Path
+Automatically identify and concatenate complete REST API paths. Supports three frameworks:
+
+**Spring MVC Style** ✅
+- `@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping`, etc.
+- Auto-merge class and method level paths
+
+**JAX-RS Style** ✅
+- `@Path` annotations (class and method level)
+- Complete path auto-concatenation
+
+**Spring Cloud Feign Style** ✅
+- `@FeignClient` + `@RequestMapping` combination
+- Auto-identify client paths
+
+**Features**:
+- Complete path concatenation: auto-merge Controller and Method paths
+- **Shortcut**: `Ctrl+Alt+A` (Windows) / `Cmd+Alt+A` (macOS)
+
+### 3️⃣ 🎯 Navigate to Controller
+Input or paste REST path/complete URL to locate corresponding Controller code.
+
+**Key Features**:
+- **Smart URL Parsing**: Support full URLs (e.g., `http://api.example.com:8080/api/user/list`), auto-extract path
+- **Multi-level Matching**: Exact match → Prefix match → Path suffix match
+- **Cache Acceleration**: First search 3-5s, subsequent searches **10ms** (**300-500x improvement**)
+- **Auto-sync**: Monitor workspace changes, auto-invalidate stale cache
+- **Multi-framework Support**: Spring, JAX-RS, Feign fully compatible
+- **Shortcut**: `Ctrl+Alt+N` (Windows) / `Cmd+Alt+N` (macOS)
+
+### 4️⃣ 📦 Copy as JSON
+Convert Java classes or selected fields to JSON structures.
+
+**Features**:
+- **Auto Type Detection**: Basic types, collections, dates generate appropriate mock values
+- **Selection Support**: Convert only selected fields or entire class
+- **Precise Type Mapping**: Correct handling of `Integer`, `BigDecimal`, `Long`, etc.
+- **Dynamic Timestamps** ⏰: Auto-use current system time for date/time fields
+- **Performance Optimization**: Field type caching improves performance ~70%
+- **Shortcut**: `Ctrl+Alt+J` (Windows) / `Cmd+Alt+J` (macOS)
+
+### 5️⃣ 📊 Copy as SQL Select
+Convert Java entity classes to SQL SELECT statements.
+
+**Features**:
+- **Auto Name Translation**: Convert CamelCase to snake_case intelligently
+- **Smart Table Name Cleaning**: Auto-identify and clean suffixes, restore real table names
+- **Field Filtering**: Auto-exclude `List`, `Map`, `Stream`, `Optional`, etc.
+- **Perfect Fallback**: Handle complex type fields correctly
+- **Shortcut**: `Ctrl+Alt+Q` (Windows) / `Cmd+Alt+Q` (macOS)
+
+**Example**:
+```java
+public class UserDTO {
+    private String userId;
+    private String userName;
+    private List<String> roles;  // Auto-excluded
+}
+```
+↓ Converts to ↓
+```sql
+SELECT user_id, user_name FROM user
+```
+
+### 6️⃣ 🔧 Arthas Diagnostic Commands
+
+#### Copy Arthas Vmtool
+Generate Arthas vmtool commands for quick memory data inspection and modification.
+- **Auto Parameter Detection**: Identify method parameter types automatically
+- **Chinese Parameter Support**: Auto-convert to Unicode escapes for cross-environment execution
+- **Shortcut**: `Ctrl+Alt+1` (Windows) / `Cmd+Alt+1` (macOS)
+
+#### Copy Arthas TimeTunnel
+Generate Arthas tt time tunnel commands for method execution recording and replay.
+- **Execution Recording**: Quick method execution record command generation
+- **Production Debugging**: Implement production issue root cause analysis
+- **Shortcut**: `Ctrl+Alt+2` (Windows) / `Cmd+Alt+2` (macOS)
+
+#### Arthas Command Library (59+ Commands)
+Quick access to complete Arthas diagnostic command library including:
+
+**Method Monitoring** (22 commands)
+- watch, trace, stack, monitor, sm, tt, ognl, getstatic, invoke, etc.
+
+**Class Inspection** (13 commands)
+- jad, sc, classloader, dump, redefine, mbean, search, etc.
+
+**Global Monitoring** (24 commands)
+- sysprop, thread, jvm, dashboard, heapdump, histogram, vmtool, vmoption, perfcounter, profiler, etc.
+
+- **Shortcut**: `Ctrl+Alt+3` (Windows) / `Cmd+Alt+3` (macOS)
+
+### 7️⃣ 📄 Copy Pure Content
+Extract plain text from strings, automatically removing escape characters.
+- **Escape Removal**: Strip `\n`, `\t`, `\\` and other escape characters
+- **Format Cleaning**: Restore escaped text to original content
+- **Shortcut**: `Ctrl+Shift+C` (Windows) / `Cmd+Shift+C` (macOS)
+
+### 8️⃣ 📌 Paste as Java String
+Smart paste as Java string with automatic escape character conversion.
+- **Auto Escape**: Automatically escape `"`, `\`, newlines, and other special characters
+- **Quick Paste**: One-click paste as standard Java string
+- **Shortcut**: `Ctrl+Shift+V` (Windows) / `Cmd+Shift+V` (macOS)
+
+## 🚀 Getting Started
+
+### Step 1: Uninstall Old Version (if installed)
+If you previously installed **Advanced Copy for Java**, please uninstall to avoid keyboard shortcut conflicts:
+- Search for "Advanced Copy for Java" in VSCode extension marketplace
+- Click Uninstall
+
+### Step 2: Install This Toolkit
+- Search for "Java Dev Toolkit"
+- Click Install
+
+### Step 3: Start Using
+- Open a Java file
+- **Right-click** at code location and select **Java Dev Toolkit** menu
+- Or use keyboard shortcuts above
+
+## 💡 Usage Tips
+
+| Scenario | Recommended Approach |
+| :--- | :--- |
+| **Daily Development** | Use keyboard shortcuts for fastest access; context menu as fallback |
+| **REST API Debugging** | Combine Copy REST Full Path + Navigate to Controller |
+| **Database Operations** | Use Copy as SQL Select for quick SQL template generation |
+| **Performance Diagnosis** | Use Copy Arthas Commands for quick diagnostic command generation |
+| **Code Documentation** | Use Copy Reference for complete reference paths |
+| **JSON Processing** | Use Copy as JSON for quick mock data generation |
+
+## 📝 Version History
+
+### v1.1.0 (SQL Field Filtering Enhancement) - Latest ⭐
+- **Complex Type Filtering**: Added Stream, Optional, Supplier, Consumer, Function, Predicate, Comparator filtering
+- **Regex Improvement**: Enhanced field declaration regex to support annotations, volatile modifier, nested generics
+- **Code Quality**: Extracted common logic into reusable functions (isComplexType, getFieldRegex)
+- **Performance**: Improved SQL generation performance through optimized regex patterns
+
+### v1.0.2 (SQL Field Recognition Fix)
+- **Field Identification**: Changed to blacklist mechanism, exclude only List/Map/Set/Collection/Array
+- **Feature Alignment**: Copy SQL now fully aligned with Copy JSON field identification logic
+- **Bug Fix**: Fixed field unrecognition issue when copying SQL from class name
+- **UX Improvement**: Copy SQL on class name now correctly shows all fields, not SELECT *
+
+### v1.0.1 (Menu Name Unification)
+- **Menu Consistency**: Unified right-click menu name from "JavaDev Copilot" to "Java Dev Toolkit"
+- **Brand Alignment**: All UI elements, documentation, and menu names fully aligned
+- **Quick Start Optimization**: Simplified upgrade instructions
+
+### v1.0.0 (Brand Rebranding)
+- **Brand Upgrade**: Renamed from "JavaDev Copilot" to "Java Dev Toolkit"
+- **Clear Positioning**: Emphasize toolkit collection, fully match current and future feature plans
+- **Complete Features**: 10 commands + complete keyboard configuration + single-level menu design
+- **Quality Assurance**: Fixed SQL field filtering, menu structure optimization, and other issues
+
+## 📦 Project Info
+
+- **Publisher**: qinlinglong
+- **Repository**: https://github.com/qinlinglong/advanced-copy
+- **License**: MIT
+- **Minimum VSCode Version**: 1.75.0
+
+## 🎯 Core Advantages
+
+✨ **Optimized for Java Development** - 10+ carefully selected features covering daily development scenarios
+
+⚡ **Lightning Fast** - Cache acceleration, subsequent searches 10ms response, 300-500x performance improvement
+
+🔄 **Multi-Framework Support** - Spring, JAX-RS, Feign fully compatible
+
+🎨 **Intelligent Conversion** - JSON/SQL auto-type detection, CamelCase/snake_case auto-translation
+
+🚀 **Diagnostic Powerhouse** - 59+ Arthas commands library for quick production issue diagnosis
 
 ---
 
-## 📝 轮回记录 (Changelog)
+<a id="chinese-version"></a>
 
-- **v1.3.7 (三风格统一 & 搜索极速)** 🚀 [Latest]
-  - **Copy REST Full Path 框架扩展**：新增支持 JAX-RS (`@Path`) 和 Feign 风格注解识别，现与 Navigate to Controller 功能对齐
-  - **三风格统一表**：Spring（`@RequestMapping` 等）、JAX-RS（`@Path`）、Feign（`@FeignClient + @RequestMapping`）全支持
-  - **搜索性能优化**：消除缓存初始化后的全量扫描备用逻辑，搜索性能提升 **5-30 倍**（5-30s → 10-50ms 无匹配场景）
-  - **缓存清理命令**：新增 "Clear Controller Navigation Cache" 命令，支持完整清除所有索引数据与磁盘缓存
+# 中文版本
 
-- **v1.3.6 (缓存隔离)** 🔒
-  - **工作区隔离缓存**：每个工作区使用独立的缓存文件，避免不同项目间缓存混淆
-  - **修复多项目问题**：解决在不同项目间切换时，REST 接口定位到错误文件的问题
-  - **缓存文件格式**：`.vscode-advanced-copy-cache-{工作区哈希}.json`，自动按项目隔离
+**Java Dev Toolkit** — Java 开发者的必备工具集。
 
-- **v1.3.5 (缓存优化)** ⏱️
-  - **缓存有效期扩展**：Controller 索引缓存有效期从 1 小时扩展至 5 天
-  - **减少重建频率**：相同工作区内，半天甚至好几天都无需重新构建索引
-  - **保持更新**：Java 文件有实际变化时仍会自动标记缓存为脏，确保数据准确
+一款为 Java 开发者精心打造的 VSCode 插件，集快速复制、格式转换、REST 路径导航、Arthas 诊断命令生成于一身，全面提升开发效率。
 
-- **v1.3.4 (搜索匹配增强)** 🔍
-  - **路径后缀匹配**：输入 `/readHistory/create` 自动匹配 `/member/readHistory/create` 等以该路径结尾的完整路径
-  - **智能搜索策略**：精确匹配 → 前缀匹配 → 路径后缀匹配，多层次提高命中率
-  - **搜索流程优化**：缓存搜索时自动回退到路径后缀，无需用户手动切换搜索模式
+## ⌨️ 快捷键矩阵
 
-- **v1.3.3 (快捷键优化)** 🎯
-  - **Copy as JSON 快捷键调整**：改为 `Cmd+Alt+J` (macOS) / `Ctrl+Alt+J` (Windows)，避免系统快捷键冲突
-  - **中文命名统一**：将 "Navigate to Controller" 改为 "粘贴定位 Controller"，保持命名风格一致
+右键打开菜单或使用以下快捷键快速操作：
 
-- **v1.3.2 (导航功能增强)** 🚀
-  - **输入方式优化**：Navigate to Controller 从剪贴板读取改为弹窗输入，支持直接输入 REST 路径或粘贴完整 URL
-  - **URL 自动解析**：支持识别完整 URL（如 `http://api.example.com:8080/api/user/list`），自动提取 path 部分（`/api/user/list`），自动去除 query 和 hash
-  - **缓存索引加速**：首次使用时构建 Controller REST 路径索引，后续搜索从 ~3-5 秒加速到 ~10ms（**300-500x 性能提升**）
-  - **文件变化自动更新**：监听工作区文件变化（新增、修改、删除），自动标记缓存为陈旧，下次搜索重新构建索引
-  - **搜索进度显示**：构建索引时显示实时进度，提示已扫描文件数和耗时，增强用户体验
+| 功能 | Windows/Linux | macOS |
+| :--- | :--- | :--- |
+| **复制引用路径** | `Ctrl+Alt+R` | `Cmd+Alt+R` |
+| **复制 REST 路径** | `Ctrl+Alt+A` | `Cmd+Alt+A` |
+| **导航到 Controller** | `Ctrl+Alt+N` | `Cmd+Alt+N` |
+| **复制为 JSON** | `Ctrl+Alt+J` | `Cmd+Alt+J` |
+| **复制为 SQL** | `Ctrl+Alt+Q` | `Cmd+Alt+Q` |
+| **复制 Arthas Vmtool** | `Ctrl+Alt+1` | `Cmd+Alt+1` |
+| **复制 Arthas TimeTunnel** | `Ctrl+Alt+2` | `Cmd+Alt+2` |
+| **Arthas 命令库** | `Ctrl+Alt+3` | `Cmd+Alt+3` |
+| **复制纯文本** | `Ctrl+Shift+C` | `Cmd+Shift+C` |
+| **粘贴为 Java 字符串** | `Ctrl+Shift+V` | `Cmd+Shift+V` |
 
-- **v1.3.0 (Arthas 神兵库觉醒)** 🚀
-  - **Arthas 命令库扩展**：从 15 个扩展到 59 个命令，覆盖方法监控、类检查、全局监控的完整场景
-  - **SQL 字段识别完美重铸**：修复类名上复制 SQL 时的字段识别问题，即使仅包含复杂类型也能正确处理
-  - **命令参数全面修正**：修复 watch (-x 5→4)、trace (-l→-n)、monitor、sm、stack 等 5 处参数错误
-  - **新增 Arthas 快捷键**：`Cmd+Alt+3` 快速访问完整命令库，包含 tt、profiler、vmoption 等高级诊断工具
-  - **🔗 导航功能新增**：`Navigate to Controller` - 粘贴 REST 路径，自动查找并打开对应的 Controller，支持精确和前缀匹配
-  - **文档升级**：快捷键信息前置，新增命令库完整说明，便于用户快速查阅
+## ✨ 功能详解
 
-- **v1.2.0 (Hiruko Performance Transcendence)** 🚀
-  - **性能境界突破：预编译祭坛**：全面引入预编译正则表达式常量库，消除重复编译成本，正则执行效能提升 **~50%**。
-  - **因果缓存映射：双层缓存**：新增符号级缓存（symbolCache）与字段类型缓存（fieldTypeCache），快速连续操作减少 API 调用 **~80%**，类型查询性能飙升 **~70%**。
-  - **高效集合进化：Set 数据结构**：用 `Set` 替代数组进行符号类型判断，将查询复杂度从 O(n) 降至 O(1)，性能突破 **~100x**。
-  - **非阻塞异步赋能**：版本检查、符号解析全面 Promise 化，主线程永无阻塞，插件激活速度感知为零。
-  - **工具函数统一**：提取 12 个高频工具函数库（collectSymbols、escapeJavaString、unescapeJavaString 等），消除 44 行重复代码，可维护性飞跃。
-  - **类型分类系统**：引入统一的 `TYPE_CATEGORIES` 分类体系，所有数值、字符串、日期等类型判断逻辑归一，代码一致性达成。
-  - **JSON 动态时间戳** ⏰：Mock JSON 中的日期/时间字段时，自动使用当前系统时间而非固定时间，实时反映观测时刻。
-  - **Vmtool 智能参数拼接** 🎯：自动识别方法参数类型，智能构造参数 JSON；若参数中含有中文字符，自动转为 Unicode 转义序列（`\uXXXX` 格式），确保生成的命令在任何 Arthas 环境都可安全执行。
+### 1️⃣ 📌 复制引用路径 (Copy Reference)
+提取 Java 全限定路径（包名+类名+方法名），快速复制类和方法的完整引用。
+- **核心功能**：一键提取完整的 Java 路径
+- **应用场景**：文档注释、日志记录、代码引用
+- **快捷键**：`Ctrl+Alt+R` (Windows) / `Cmd+Alt+R` (macOS)
 
-- **v1.1.4 (Hiruko Edition)** 👁️
-  - **因果锁定：快捷键矩阵**：全量支持 `Ctrl+Alt` (Win) / `Cmd+Alt` (Mac) 瞬发快捷键，释放右键祭坛压力。
-  - **因果重构：复制 SQL**：新增 `Copy SQL Select` 功能，支持自动表名清洗（DTO/Entity）与命名转译（CamelCase -> snake_case）。
-  - **数据建模增强：复制 JSON**：支持类与选区字段精准解析，修复 `BigDecimal`、`Long`、`Integer` 等数值映射至 `0` 的精度偏移。
-  - **因果修正：粘贴增强**：智能粘贴现在支持自动剥离 SQL 场景下的首尾括号，并增强了对嵌套转义 JSON 的识别。
+### 2️⃣ 🌐 复制 REST 路径 (Copy REST Full Path)
+自动识别并拼接 REST 接口的完整路径。支持三种主流框架：
 
-  - **新瞳觉醒：REST 观测**：新增 `REST Path` 复制，支持 Spring MVC (`@RequestMapping` 等) 全注解识别与路径自动拼接。
-  - **时空隧道：TimeTunnel**：新增 `TimeTunnel Tt` 命令生成，一键捕捉方法执行现场入参与出参。
+**Spring MVC 风格** ✅
+- `@RequestMapping`, `@GetMapping`, `@PostMapping`, `@PutMapping`, `@DeleteMapping` 等
+- 自动融合类级和方法级路径
 
-- **v1.1.2**
-  - **引用路径优化**：重构 `Copy Reference` 解析引擎，提升在复杂内部类及多层包名嵌套下的路径提取精度。
-  - **激活逻辑优化**：引入 `onStartupFinished` 事件，确保插件在 VS Code 启动后平滑开启版本观测。
+**JAX-RS 风格** ✅
+- `@Path` 注解（类和方法级别）
+- 完整路径自动拼接
 
-- **v1.1.1**
-  - **形态定名**：正式定名为 **Hiruko (蛭子)** 形态。
-  - **深度适配**：针对 Arthas `vmtool` 复杂参数序列化语法进行深度调优，支持 FastJSON 强制反序列化构造。
+**Feign Client 风格** ✅
+- `@FeignClient` + `@RequestMapping` 组合
+- 自动识别客户端和接口路径
 
-- **v1.1.0**
-  - **重大更新：诊断神技**：首次集成 Arthas `vmtool` 智能命令生成，支持从内存中穿透并获取实时对象实例。
-  - **因果修复**：修复了在 Windows PowerShell 环境下，更新脚本路径含有空格导致执行异常的问题。
+**功能特性**：
+- 完整路径拼接：自动融合 Controller 与 Method 层的 Mapping 路径
+- **快捷键**：`Ctrl+Alt+A` (Windows) / `Cmd+Alt+A` (macOS)
 
-- **v1.0.1**
-  - **激活增强**：新增 `onLanguage:java` 延迟加载策略，优化插件对系统资源的占用。
-  - **反馈增强**：引入 `vscode.window.showInformationMessage` 交互，提供更直观的复制成功提示。
+### 3️⃣ 🎯 导航到 Controller (Navigate to Controller)
+输入或粘贴 REST 路径/完整 URL，一键定位对应的 Controller 代码。
 
-- **v1.0.0 (The Origin)** 🌱
-  - **权能诞生**：核心 `Copy Reference` 功能上线，支持提取包名+类名+方法名的基本路径。
-  - **版本观测系统**：内置远程版本检测逻辑，实现通过内网 OSS 自动下发 VSIX 更新的能力。
-  - **纯净粘贴**：基础版 `Paste as Java String` 上线，解决初级字符串拼接转义问题。
+**核心特性**：
+- **智能 URL 解析**：支持识别完整 URL（如 `http://api.example.com:8080/api/user/list`），自动提取 path 部分
+- **多层级匹配**：精确匹配 → 前缀匹配 → 路径后缀匹配，提高命中率
+- **缓存加速**：首次搜索 3-5 秒，后续搜索 **10ms**（**300-500x 性能提升**）
+- **文件自动更新**：监听工作区文件变化，自动标记缓存为陈旧
+- **三框架支持**：Spring、JAX-RS、Feign 完全兼容
+- **快捷键**：`Ctrl+Alt+N` (Windows) / `Cmd+Alt+N` (macOS)
+
+### 4️⃣ 📦 复制为 JSON (Copy as JSON)
+将 Java 类或选中的字段转换为 JSON 结构。
+
+**功能特性**：
+- **自动类型识别**：基本类型、集合、日期等自动生成对应的 Mock 值
+- **选区支持**：选中字段时只转换选中部分；选中类名时转换全量 JSON
+- **精准类型映射**：正确处理 `Integer`、`BigDecimal`、`Long` 等数值类型
+- **动态时间戳** ⏰：Mock 日期/时间字段时，自动使用当前系统时间
+- **性能优化**：字段类型解析结果缓存，重复操作性能提升 **~70%**
+- **快捷键**：`Ctrl+Alt+J` (Windows) / `Cmd+Alt+J` (macOS)
+
+### 5️⃣ 📊 复制为 SQL (Copy as SQL Select)
+将 Java 实体类转换为 SQL SELECT 语句。
+
+**功能特性**：
+- **命名自动转译**：智能将驼峰命名（CamelCase）转为下划线命名（snake_case）
+- **表名智能清洗**：自动识别并清洗 `Entity/DTO/VO/POJO/Bean` 后缀，还原真实表名
+- **字段精准过滤**：自动剔除 `List`、`Map`、`Stream`、`Optional` 等非数据库字段，仅保留基础类型
+- **完美容错**：即使类中仅包含复杂类型字段，也能正确处理
+- **快捷键**：`Ctrl+Alt+Q` (Windows) / `Cmd+Alt+Q` (macOS)
+
+**示例**：
+```java
+public class UserDTO {
+    private String userId;
+    private String userName;
+    private List<String> roles;  // 自动过滤
+}
+```
+↓ 转换为 ↓
+```sql
+SELECT user_id, user_name FROM user
+```
+
+### 6️⃣ 🔧 Arthas 诊断命令
+
+#### 复制 Arthas Vmtool
+生成 Arthas vmtool 命令，快速查看和修改内存数据。
+- **自动参数识别**：自动识别方法参数类型
+- **中文参数支持**：自动转为 Unicode 转义序列（`\uXXXX` 格式），安全跨环境执行
+- **快捷键**：`Ctrl+Alt+1` (Windows) / `Cmd+Alt+1` (macOS)
+
+#### 复制 Arthas TimeTunnel
+生成 Arthas tt 时间隧道命令，记录和回放方法执行。
+- **执行记录**：快速生成方法执行记录命令
+- **生产回溯**：实现生产现场问题回溯
+- **快捷键**：`Ctrl+Alt+2` (Windows) / `Cmd+Alt+2` (macOS)
+
+#### Arthas 命令库（59+ 命令）
+快速访问完整的 Arthas 诊断命令库，包括：
+
+**方法监控** (22 个)
+- watch, trace, stack, monitor, sm, tt, ognl, getstatic, invoke 等
+
+**类检查** (13 个)
+- jad, sc, classloader, dump, redefine, mbean, search 等
+
+**全局监控** (24 个)
+- sysprop, thread, jvm, dashboard, heapdump, histogram, vmtool, vmoption, perfcounter, profiler 等
+
+- **快捷键**：`Ctrl+Alt+3` (Windows) / `Cmd+Alt+3` (macOS)
+
+### 7️⃣ 📄 复制纯文本 (Copy Pure Content)
+提取字符串中的纯文本，自动去除转义字符。
+- **转义清理**：剥离 `\n`, `\t`, `\\` 等转义字符
+- **格式净化**：将转义后的文本恢复为原始内容
+- **快捷键**：`Ctrl+Shift+C` (Windows) / `Cmd+Shift+C` (macOS)
+
+### 8️⃣ 📌 粘贴为 Java 字符串 (Paste as Java String)
+智能粘贴为 Java 字符串，自动转义特殊字符。
+- **自动转义**：自动转义 `"`, `\\`, 换行符等特殊字符
+- **快速粘贴**：一键粘贴为标准 Java 字符串
+- **快捷键**：`Ctrl+Shift+V` (Windows) / `Cmd+Shift+V` (macOS)
+
+## 🚀 快速开始
+
+### 第 1 步：卸载旧版本（如有）
+如果之前安装了 **Advanced Copy for Java**，请先卸载以避免快捷键冲突：
+- 在 VSCode 扩展市场搜索 "Advanced Copy for Java"
+- 点击卸载
+
+### 第 2 步：安装此工具集
+- 搜索 "Java Dev Toolkit"
+- 点击安装
+
+### 第 3 步：开始使用
+- 打开 Java 文件
+- **右键点击**代码位置，选择 **Java Dev Toolkit** 菜单
+- 或使用上面的快捷键表直接操作
+
+## 💡 使用建议
+
+| 场景 | 推荐方案 |
+| :--- | :--- |
+| **日常开发** | 使用快捷键最快，右键菜单为备选 |
+| **REST 调试** | Copy REST Full Path + Navigate to Controller 配合使用 |
+| **数据库操作** | Copy as SQL Select 快速生成 SQL 模板 |
+| **性能诊断** | Copy Arthas Commands 快速生成诊断命令 |
+| **代码文档** | Copy Reference 快速复制完整引用 |
+| **JSON 处理** | Copy as JSON 快速生成 Mock 数据 |
+
+## 📝 版本历史
+
+### v1.1.0 (SQL 字段过滤增强) - 最新版 ⭐
+- **复杂类型过滤**：增加 Stream、Optional、Supplier、Consumer、Function、Predicate、Comparator 过滤
+- **正则表达式改进**：增强字段声明正则，支持注解、volatile 修饰符、嵌套泛型
+- **代码质量**：提取公共逻辑到可复用函数（isComplexType、getFieldRegex）
+- **性能优化**：通过优化正则表达式提升 SQL 生成性能
+
+### v1.0.2 (SQL 字段识别修复)
+- **字段识别改进**：改为黑名单机制，只排除 List/Map/Set/Collection/Array 等复杂类型
+- **功能对齐**：Copy SQL 现在与 Copy JSON 的字段识别逻辑完全一致
+- **Bug 修复**：修复在类名上复制 SQL 时无法识别字段的问题
+- **用户体验**：在类名上复制 SQL 现在能正确显示所有字段，而不是 SELECT *
+
+### v1.0.1 (菜单名称统一)
+- **菜单名称同步**：右键菜单名称从 "JavaDev Copilot" 更新为 "Java Dev Toolkit"
+- **品牌统一**：所有UI元素、文档、菜单名称完全对齐
+- **快速开始优化**：简化升级说明，只提示卸载 Advanced Copy for Java
+
+### v1.0.0 (品牌重塑)
+- **品牌升级**：从 JavaDev Copilot 更名为 Java Dev Toolkit
+- **清晰定位**：强调工具集合，完全匹配当前和未来的功能规划
+- **功能完整**：10 个命令 + 完整快捷键配置 + 单层菜单设计
+- **质量保证**：修复了 SQL 字段过滤、菜单结构优化等多个问题
+
+## 📦 项目信息
+
+- **发布者**: qinlinglong
+- **仓库**: https://github.com/qinlinglong/advanced-copy
+- **License**: MIT
+- **最小 VSCode 版本**: 1.75.0
+
+## 🎯 核心优势
+
+✨ **专为 Java 开发优化** - 10+ 精选功能，覆盖日常开发全场景
+
+⚡ **极速执行** - 缓存加速，后续搜索 10ms 响应，性能提升 300-500 倍
+
+🔄 **多框架支持** - Spring、JAX-RS、Feign 三种主流框架完全兼容
+
+🎨 **智能转换** - JSON/SQL 自动识别类型，驼峰/下划线自动转译
+
+🚀 **诊断利器** - 59+ Arthas 命令库，快速定位生产问题
 
 ---
 
-**Produced by qinlinglong** *”观测已定，逻辑重现。在 Hiruko 的注视下，代码的影子里没有秘密。”*
+**享受高效的 Java 开发体验！** 🎉
