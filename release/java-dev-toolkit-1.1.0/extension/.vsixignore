@@ -1,0 +1,14 @@
+.git
+.gitignore
+.vscode
+**/*.vsix
+node_modules
+test
+**/*.ts
+**/*.tsx
+**/*.test.js
+package-lock.json
+*.zip
+advanced-copy-for-java-*/
+.claude
+.claude/**

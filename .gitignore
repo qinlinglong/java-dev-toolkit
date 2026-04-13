@@ -13,3 +13,13 @@ yarn.lock
 *.swo
 *~
 .git/
+java-dev-toolkit-1.1.0.zip
+java-dev-toolkit-1.1.0/\[Content_Types].xml
+java-dev-toolkit-1.1.0/extension.vsixmanifest
+java-dev-toolkit-1.1.0/extension/.vsixignore
+java-dev-toolkit-1.1.0/extension/changelog.md
+java-dev-toolkit-1.1.0/extension/extension.js
+java-dev-toolkit-1.1.0/extension/LICENSE.txt
+java-dev-toolkit-1.1.0/extension/logo-128.png
+java-dev-toolkit-1.1.0/extension/package.json
+java-dev-toolkit-1.1.0/extension/readme.md
