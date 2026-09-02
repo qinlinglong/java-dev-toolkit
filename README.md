@@ -1,6 +1,6 @@
 # Java Dev Toolkit
 
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](https://github.com/qinlinglong/java-dev-toolkit)
+[![Version](https://img.shields.io/badge/version-1.1.3-blue.svg)](https://github.com/qinlinglong/java-dev-toolkit)
 [![Language](https://img.shields.io/badge/language-English%20%7C%20中文-brightgreen.svg)](#readme-languages)
 
 <div id="readme-languages">
@@ -176,7 +176,12 @@ If you previously installed **Advanced Copy for Java**, please uninstall to avoi
 
 ## 📝 Version History
 
-### v1.1.2 (REST Navigation and Fuzzy Search) - Latest ⭐
+### v1.1.3 (Maintenance Release) - Latest ⭐
+
+- **Release parity**: regenerated all named plugin packages from the complete Java Dev Toolkit implementation.
+- **Packaging cleanup**: VSIX packages contain only the runtime extension files and required documentation.
+
+### v1.1.2 (REST Navigation and Fuzzy Search)
 
 - **Fuzzy REST navigation**: tolerates typos and supports prefix, suffix, CamelCase, abbreviation, and similarity matching.
 - **Controller index**: supports Spring MVC, Spring Cloud Feign, and JAX-RS routes with workspace-isolated caching.
@@ -392,7 +397,12 @@ SELECT user_id, user_name FROM user
 
 ## 📝 版本历史
 
-### v1.1.2（REST 导航与模糊搜索）- 最新版 ⭐
+### v1.1.3（维护版本）- 最新版 ⭐
+
+- **版本统一**：所有别名插件均基于完整的 Java Dev Toolkit 实现重新生成。
+- **打包清理**：VSIX 仅包含运行时插件文件和必要文档。
+
+### v1.1.2（REST 导航与模糊搜索）
 
 - **REST 模糊导航**：支持错别字容错、前缀、后缀、驼峰、缩写和相似度匹配。
 - **Controller 索引**：支持 Spring MVC、Spring Cloud Feign 和 JAX-RS，并按工作区隔离缓存。

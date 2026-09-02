@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.3] - 2026-09-02
+
+### Changed
+- Unified the release version across Java Dev Toolkit and all generated plugin aliases.
+- Regenerated VSIX packages from the complete current implementation.
+- Kept development files, historical archives, and local configuration out of release packages.
+
+---
+
 ## [1.1.2] - 2026-04-13
 
 ### Added
