@@ -15,6 +15,8 @@
 - VSIX 文件名必须为 `<目录名>-<版本>.vsix`。
 - `package.json.name` 必须与目录名完全一致。
 - `package.json.displayName` 必须与该插件名称对应，使用单词首字母大写的显示形式。
+- 每个别名插件的 README 标题、产品名称和安装/使用提示必须与该插件的 `displayName` 同步。
+- 所有插件 README 中的 Git 仓库链接统一指向 `https://github.com/qinlinglong/java-dev-toolkit`，不得按别名修改仓库地址。
 - VSIX 文件名、`package.json.name` 和插件目录名三者不得不一致。
 - `package.json.main` 必须为 `./extension.js`。
 
