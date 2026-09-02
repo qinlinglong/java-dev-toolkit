@@ -36,6 +36,7 @@
 - `java-smart-helper`
 - `java-toolkit`
 - `javadev-copilot`（显示名称：`JavaDev Copilot`）
+- `advanced-copy-for-java`（显示名称：`Advanced Copy for Java`）
 
 例如：
 
