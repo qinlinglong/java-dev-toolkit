@@ -1,63 +1,31 @@
-# Version control
 .git
 .gitignore
 .gitattributes
-
-# Development files
 .vscode
-.DS_Store
-*.code-workspace
+.claude
 node_modules
-npm-debug.log
-yarn.lock
+test
+release
+dist
+build
+coverage
+*.vsix
+*.zip
+*.log
+*.backup
+extension.js.backup
+qinlinglong.java-dev-toolkit-1.1.2/**
 package-lock.json
-
-# Build artifacts
-build/
-dist/
-*.map
-
-# Test files
-test/
-*.test.js
-.mocharc.json
-
-# Documentation
-docs/
-*.md
-
-# IDE
-.idea
+*.code-workspace
 *.swp
 *.swo
 *~
 
-# CI/CD
-.github
-.gitlab-ci.yml
-.travis.yml
-Jenkinsfile
-
-# Archive files
-*.vsix
-*.tar.gz
-*.zip
-
-# Miscellaneous
-.env
-.env.local
-*.log
-coverage/
-
-# Project specific audit files
-SQL_DEEP_REVIEW.md
-SQL_FIX_PLAN.md
-DEEP_REVIEW_SUMMARY.md
-
-# Keep these files as they are important for VSCode
 !package.json
 !extension.js
 !logo-128.png
+!readme.md
 !README.md
-!LICENSE
+!LICENSE.txt
+!changelog.md
 !CHANGELOG.md
