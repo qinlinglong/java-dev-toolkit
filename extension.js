@@ -108,6 +108,7 @@ function initCachePath() {
 }
 const CACHE_VALIDITY_TIME = 5 * 24 * 60 * 60 * 1000;  // 5 天
 const CHANGED_FILES = new Set();      // 追踪变化的文件
+const CACHE_INVALIDATE_DELAY = 300;
 
 /**
  * 将 Controller 索引缓存保存到磁盘（磁盘缓存是工作区隔离的）
@@ -196,9 +197,17 @@ function loadCache() {
             suffixIndexL1.clear();
             suffixIndexL2 = null;
             CHANGED_FILES.clear();
+            fileToControllersMap.clear();
 
             cacheData.pathIndex.forEach(([pathKey, items]) => {
                 controllerPathIndex.set(pathKey, items);
+                for (const item of items) {
+                    if (!item.file) continue;
+                    if (!fileToControllersMap.has(item.file)) {
+                        fileToControllersMap.set(item.file, []);
+                    }
+                    fileToControllersMap.get(item.file).push(item);
+                }
             });
             Object.assign(controllerLayeredIndex, cacheData.layeredIndex);
             cacheData.suffixIndexL1.forEach(([key, paths]) => {
@@ -1034,25 +1043,31 @@ function calculatePathMatchScore(inputPath, fullPath) {
     let totalScore = 0;
     let matchedSegments = 0;
     const matchDetails = [];
+    const usedTargetSegments = new Set();
     
     for (const inputSeg of inputSegments) {
         let bestSegmentScore = 0;
         let bestMatchType = 'none';
         let bestMatchedSeg = '';
+        let bestMatchedIndex = -1;
         
-        for (const targetSeg of fullSegments) {
+        for (let targetIndex = 0; targetIndex < fullSegments.length; targetIndex++) {
+            if (usedTargetSegments.has(targetIndex)) continue;
+            const targetSeg = fullSegments[targetIndex];
             const result = calculateSegmentScore(inputSeg, targetSeg);
             
             if (result.score > bestSegmentScore) {
                 bestSegmentScore = result.score;
                 bestMatchType = result.matchType;
                 bestMatchedSeg = targetSeg;
+                bestMatchedIndex = targetIndex;
             }
         }
         
         if (bestSegmentScore > 0) {
             totalScore += bestSegmentScore;
             matchedSegments++;
+            usedTargetSegments.add(bestMatchedIndex);
             matchDetails.push(`${inputSeg}→${bestMatchedSeg}(${bestMatchType})`);
         }
     }
@@ -1114,6 +1129,17 @@ async function incrementalUpdateIndex(filePath, operation = 'change') {
     const startTime = Date.now();
 
     try {
+        // 先解析再修改索引，确保读取/解析失败时旧索引仍然可用。
+        let parseResult = null;
+        if (operation !== 'delete') {
+            try {
+                parseResult = await parseJavaFileForControllers(filePath);
+            } catch (error) {
+                console.warn(`⚠️  增量更新失败，保留旧缓存: ${filePath} - ${error.message}`);
+                return { updated: 0, added: 0 };
+            }
+        }
+
         // 第1步：删除该文件的旧数据
         const oldControllers = fileToControllersMap.get(filePath) || [];
         let deletedCount = 0;
@@ -1156,8 +1182,6 @@ async function incrementalUpdateIndex(filePath, operation = 'change') {
 
         if (operation !== 'delete') {
             try {
-                const parseResult = await parseJavaFileForControllers(filePath);
-
                 for (const method of parseResult.methods) {
                     const path = method.fullPath;
                     const controller = {
@@ -1214,8 +1238,7 @@ async function incrementalUpdateIndex(filePath, operation = 'change') {
 
                 console.log(`✅ 增量更新完成: ${filePath} | 删除 ${deletedCount} 个旧路由，新增 ${addedCount} 个路由 (${Date.now() - startTime}ms)`);
             } catch (error) {
-                console.warn(`⚠️  增量更新失败，保留旧缓存: ${filePath} - ${error.message}`);
-                // 保留旧缓存，不做变更
+                console.warn(`⚠️  增量索引写入失败: ${filePath} - ${error.message}`);
                 return { updated: deletedCount, added: 0 };
             }
         } else {
@@ -1417,6 +1440,9 @@ async function parseJavaFileForControllers(filePath) {
     // 提取类名（支持 class 和 interface）
     const classMatch = text.match(/(?:public\s+)?(?:class|interface)\s+(\w+)/);
     const className = classMatch ? classMatch[1] : '';
+    const classDeclarationLine = classMatch
+        ? text.slice(0, classMatch.index).split('\n').length - 1
+        : -1;
 
     // 提取类级路径（Spring: @RequestMapping 或 JAX-RS: @Path）
     let classPath = '';
@@ -1436,15 +1462,18 @@ async function parseJavaFileForControllers(filePath) {
     // 按行遍历，查找所有方法的映射注解
     const lines = text.split('\n');
     for (let i = 0; i < lines.length; i++) {
+        // 类声明之前的映射属于类级注解，不能再次作为方法映射处理。
+        if (classDeclarationLine >= 0 && i < classDeclarationLine) continue;
         const line = lines[i];
 
         let methodPath = '';
         let foundMapping = false;
 
         // Spring 风格：@RequestMapping, @PostMapping, @GetMapping 等
-        const springMapMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?"([^"]+)"/);
-        if (springMapMatch) {
-            methodPath = springMapMatch[1];
+        const springMappingAnnotation = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\b/);
+        if (springMappingAnnotation) {
+            const springPathMatch = line.match(/@(?:Post|Get|Put|Delete|Patch|Request)Mapping\s*\(\s*(?:(?:value|path)\s*=\s*)?(?:\{\s*)?"([^"]*)"/);
+            methodPath = springPathMatch ? springPathMatch[1] : '';
             foundMapping = true;
         }
 
@@ -1457,6 +1486,7 @@ async function parseJavaFileForControllers(filePath) {
                 methodPath = jaxRsPathMatch[1];
                 foundMapping = true;
             } else if (httpMethodMatch) {
+                foundMapping = true;
                 // HTTP 方法注解存在，检查附近的 @Path
                 for (let k = Math.max(0, i - 5); k < Math.min(lines.length, i + 1); k++) {
                     const pathMatch = lines[k].match(/@Path\s*\(\s*"([^"]+)"\s*\)/);
@@ -1469,11 +1499,11 @@ async function parseJavaFileForControllers(filePath) {
             }
         }
 
-        if (foundMapping && methodPath) {
+        if (foundMapping) {
             // 向下查找方法名（最多查找5行）
             let methodName = '';
             let methodLine = -1;  // 记录方法所在的行号
-            for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+            for (let j = i; j < Math.min(i + 6, lines.length); j++) {
                 const methodLineText = lines[j];
                 // 支持 interface 方法（无方法体）和 class 方法
                 const methodMatch = methodLineText.match(/(?:public|private|protected)?\s*(?:static)?\s*(?:synchronized)?\s*[\w<>.*]+\s+(\w+)\s*\(/);
@@ -3070,68 +3100,53 @@ let copySql = vscode.commands.registerCommand('advCopy.copySqlSelect', async () 
 
     // 添加文件监听器（工作区文件变化检测）
     const fileWatcher = vscode.workspace.createFileSystemWatcher('**/*.java');
+    const pendingJavaFileUpdates = new Map();
+    let cacheInvalidateTimer = null;
+
+    const flushJavaFileUpdates = async () => {
+        cacheInvalidateTimer = null;
+        if (isIndexBuilding) {
+            cacheInvalidateTimer = setTimeout(flushJavaFileUpdates, CACHE_INVALIDATE_DELAY);
+            return;
+        }
+
+        const updates = Array.from(pendingJavaFileUpdates.entries());
+        pendingJavaFileUpdates.clear();
+        for (const [filePath, operation] of updates) {
+            if (controllerIndexInitialized) {
+                await incrementalUpdateIndex(filePath, operation);
+            } else {
+                CHANGED_FILES.add(filePath);
+            }
+        }
+    };
+
+    const scheduleJavaFileUpdate = (filePath, operation) => {
+        pendingJavaFileUpdates.set(filePath, operation);
+        clearTimeout(cacheInvalidateTimer);
+        cacheInvalidateTimer = setTimeout(flushJavaFileUpdates, CACHE_INVALIDATE_DELAY);
+    };
 
     fileWatcher.onDidCreate((event) => {
-        // 新增 Java 文件，如果缓存已初始化则增量添加，否则标记为脏等待全量重建
-        if (isIndexBuilding) return;
-
-        clearTimeout(cacheInvalidateTimer);
-        cacheInvalidateTimer = setTimeout(async () => {
-            if (!isIndexBuilding) {
-                if (controllerIndexInitialized) {
-                    // 缓存已初始化，执行增量更新
-                    console.log('📝 检测到新增文件，执行增量更新...');
-                    await incrementalUpdateIndex(event.fsPath, 'create');
-                } else {
-                    // 缓存未初始化，标记变化文件等待全量重建
-                    console.log('📝 检测到新增文件，缓存未初始化，标记为待处理');
-                    CHANGED_FILES.add(event.fsPath);
-                }
-            }
-        }, CACHE_INVALIDATE_DELAY);
+        scheduleJavaFileUpdate(event.fsPath, 'create');
     });
 
     fileWatcher.onDidChange((event) => {
-        // 文件被修改，如果缓存已初始化则增量更新，否则标记为脏
-        if (isIndexBuilding) return;
-
-        clearTimeout(cacheInvalidateTimer);
-        cacheInvalidateTimer = setTimeout(async () => {
-            if (!isIndexBuilding) {
-                if (controllerIndexInitialized) {
-                    // 缓存已初始化，执行增量更新（立即反映变化）
-                    console.log('📝 检测到文件修改，执行增量更新...');
-                    await incrementalUpdateIndex(event.fsPath, 'change');
-                } else {
-                    // 缓存未初始化，标记变化文件等待全量重建
-                    console.log('📝 检测到文件修改，缓存未初始化，标记为待处理');
-                    CHANGED_FILES.add(event.fsPath);
-                }
-            }
-        }, CACHE_INVALIDATE_DELAY);
+        scheduleJavaFileUpdate(event.fsPath, 'change');
     });
 
     fileWatcher.onDidDelete((event) => {
-        // 文件被删除，从索引中删除该文件的数据
-        if (isIndexBuilding) return;
-
-        clearTimeout(cacheInvalidateTimer);
-        cacheInvalidateTimer = setTimeout(async () => {
-            if (!isIndexBuilding) {
-                if (controllerIndexInitialized) {
-                    // 缓存已初始化，执行增量删除
-                    console.log('📝 检测到文件删除，从索引移除...');
-                    await incrementalUpdateIndex(event.fsPath, 'delete');
-                } else {
-                    // 缓存未初始化，标记变化文件等待全量重建
-                    console.log('📝 检测到文件删除，缓存未初始化，标记为待处理');
-                    CHANGED_FILES.add(event.fsPath);
-                }
-            }
-        }, CACHE_INVALIDATE_DELAY);
+        scheduleJavaFileUpdate(event.fsPath, 'delete');
     });
 
-    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, clearControllerCacheCommand, fileWatcher, workspaceFolderChangeDisposable);
+    const watcherQueueDisposable = {
+        dispose() {
+            clearTimeout(cacheInvalidateTimer);
+            pendingJavaFileUpdates.clear();
+        }
+    };
+
+    context.subscriptions.push(copyRef, copyRestPath, copyVmtool, copyTimeTunnel, copyPlain, pastePlain, copyAsJson, copySql, arthCommand, navigateToController, clearControllerCacheCommand, fileWatcher, watcherQueueDisposable, workspaceFolderChangeDisposable);
 }
 
 function deactivate() {}

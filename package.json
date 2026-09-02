@@ -189,7 +189,8 @@
     ]
   },
   "scripts": {
-    "compile": "echo 'JavaScript project - no compilation needed'"
+    "compile": "echo 'JavaScript project - no compilation needed'",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "sharp": "^0.34.5",
