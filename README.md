@@ -1,6 +1,6 @@
 # Java Dev Toolkit
 
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](https://github.com/qinlinglong/advanced-copy)
+[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](https://github.com/qinlinglong/java-dev-toolkit)
 [![Language](https://img.shields.io/badge/language-English%20%7C%20中文-brightgreen.svg)](#readme-languages)
 
 <div id="readme-languages">
@@ -176,7 +176,13 @@ If you previously installed **Advanced Copy for Java**, please uninstall to avoi
 
 ## 📝 Version History
 
-### v1.1.0 (SQL Field Filtering Enhancement) - Latest ⭐
+### v1.1.2 (REST Navigation and Fuzzy Search) - Latest ⭐
+
+- **Fuzzy REST navigation**: tolerates typos and supports prefix, suffix, CamelCase, abbreviation, and similarity matching.
+- **Controller index**: supports Spring MVC, Spring Cloud Feign, and JAX-RS routes with workspace-isolated caching.
+- **Live updates**: Java file changes are incrementally reflected without rebuilding the entire index.
+
+### v1.1.0 (SQL Field Filtering Enhancement)
 - **Complex Type Filtering**: Added Stream, Optional, Supplier, Consumer, Function, Predicate, Comparator filtering
 - **Regex Improvement**: Enhanced field declaration regex to support annotations, volatile modifier, nested generics
 - **Code Quality**: Extracted common logic into reusable functions (isComplexType, getFieldRegex)
@@ -386,7 +392,13 @@ SELECT user_id, user_name FROM user
 
 ## 📝 版本历史
 
-### v1.1.0 (SQL 字段过滤增强) - 最新版 ⭐
+### v1.1.2（REST 导航与模糊搜索）- 最新版 ⭐
+
+- **REST 模糊导航**：支持错别字容错、前缀、后缀、驼峰、缩写和相似度匹配。
+- **Controller 索引**：支持 Spring MVC、Spring Cloud Feign 和 JAX-RS，并按工作区隔离缓存。
+- **实时更新**：Java 文件变化后增量更新索引，无需每次重新扫描整个项目。
+
+### v1.1.0（SQL 字段过滤增强）
 - **复杂类型过滤**：增加 Stream、Optional、Supplier、Consumer、Function、Predicate、Comparator 过滤
 - **正则表达式改进**：增强字段声明正则，支持注解、volatile 修饰符、嵌套泛型
 - **代码质量**：提取公共逻辑到可复用函数（isComplexType、getFieldRegex）
