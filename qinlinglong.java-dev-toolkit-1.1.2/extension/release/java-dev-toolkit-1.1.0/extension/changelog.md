@@ -1,31 +1,5 @@
 # Changelog
 
-## [1.1.2] - 2026-04-13
-
-### Added
-- **Fuzzy Search for REST Navigation**: Enhanced Controller navigation with intelligent fuzzy matching
-  - Levenshtein distance algorithm for typo tolerance (e.g., "usre" matches "user")
-  - CamelCase parsing support (e.g., "userCont" matches "UserController")
-  - Abbreviation matching (e.g., "uc" matches "UserController")
-  - Multi-strategy scoring system with 8 matching levels
-  - Smart result ranking by relevance score
-
-### Changed
-- **Search Algorithm Optimization**: Improved findControllersByPath function
-  - Added fallback fuzzy search when exact/prefix/suffix matching fails
-  - Implemented path segment-level matching with comprehensive scoring
-  - Set minimum score threshold (0.3) to filter low-quality results
-  - Maintained backward compatibility with existing matching strategies
-
-### Technical Details
-- New functions: `levenshteinDistance()`, `calculateSimilarity()`, `camelCaseToWords()`
-- New functions: `isAbbreviationMatch()`, `calculateSegmentScore()`, `calculatePathMatchScore()`
-- New function: `fuzzySearchControllers()` - main fuzzy search entry point
-- Scoring weights: exact(1.0), prefix(0.9), suffix(0.85), camelPrefix(0.8), contains(0.75), camelContains(0.7), abbreviation(0.65), fuzzy(0.6*similarity)
-- Final score formula: coverage * 0.4 + avgQuality * 0.6 + bonus(0.1)
-
----
-
 ## [1.1.0] - 2026-04-03
 
 ### Added

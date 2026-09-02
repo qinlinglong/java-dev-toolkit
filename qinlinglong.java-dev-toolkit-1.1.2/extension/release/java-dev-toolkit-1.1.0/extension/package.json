@@ -2,7 +2,7 @@
   "name": "java-dev-toolkit",
   "displayName": "Java Dev Toolkit",
   "description": "Java 开发工具集：快速复制、格式转换、REST 路径导航、Arthas 命令生成等多个实用工具。",
-  "version": "1.1.2",
+  "version": "1.1.0",
   "publisher": "qinlinglong",
   "author": "qinlinglong",
   "icon": "logo-128.png",
@@ -187,9 +187,6 @@
         "mac": "cmd+alt+n"
       }
     ]
-  },
-  "scripts": {
-    "compile": "echo 'JavaScript project - no compilation needed'"
   },
   "devDependencies": {
     "sharp": "^0.34.5",

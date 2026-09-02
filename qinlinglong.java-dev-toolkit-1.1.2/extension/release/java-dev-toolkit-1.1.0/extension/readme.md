@@ -1,6 +1,6 @@
 # Java Dev Toolkit
 
-[![Version](https://img.shields.io/badge/version-1.1.2-blue.svg)](https://github.com/qinlinglong/advanced-copy)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/qinlinglong/advanced-copy)
 [![Language](https://img.shields.io/badge/language-English%20%7C%20中文-brightgreen.svg)](#readme-languages)
 
 <div id="readme-languages">
@@ -305,7 +305,7 @@ If you previously installed **Advanced Copy for Java**, please uninstall to avoi
 - **快捷键**：`Ctrl+Alt+Q` (Windows) / `Cmd+Alt+Q` (macOS)
 
 **示例**：
-``java
+```java
 public class UserDTO {
     private String userId;
     private String userName;
@@ -313,7 +313,7 @@ public class UserDTO {
 }
 ```
 ↓ 转换为 ↓
-``sql
+```sql
 SELECT user_id, user_name FROM user
 ```
 
