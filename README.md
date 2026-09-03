@@ -213,7 +213,7 @@ If you previously installed **Advanced Copy for Java**, please uninstall to avoi
 ## 📦 Project Info
 
 - **Publisher**: qinlinglong
-- **Repository**: https://github.com/qinlinglong/advanced-copy
+- **Repository**: https://github.com/qinlinglong/java-dev-toolkit
 - **License**: MIT
 - **Minimum VSCode Version**: 1.75.0
 
@@ -434,7 +434,7 @@ SELECT user_id, user_name FROM user
 ## 📦 项目信息
 
 - **发布者**: qinlinglong
-- **仓库**: https://github.com/qinlinglong/advanced-copy
+- **仓库**: https://github.com/qinlinglong/java-dev-toolkit
 - **License**: MIT
 - **最小 VSCode 版本**: 1.75.0
 
